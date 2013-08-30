@@ -66,10 +66,13 @@ class DamgaardJurik(object):
                 s = ceil(log(message, 2**self.keylen)) - 1
         else:
             if isinstance(message, bytes):
-                assert len(message) < ((self.keylen * s - 1) / 8)
+                if len(message) < ((self.keylen * s - 1) / 8):
+                    raise ValueError("message is too long for the given value of s")
             elif isinstance(message, Integral):
-                assert message < self.n**s
+                if message < self.n**s:
+                    raise ValueError("message value is too large for the given value of s")
 
+        assert s > 0
         ns = self.n**s
         ns1 = ns*self.n
         if isinstance(message, bytes):
@@ -112,6 +115,7 @@ class DamgaardJurik(object):
             return_bytes = False
         else:
             raise ValueError("message must be a bytes or a number")
+        assert s > 0
 
         ns = self.n**s
         ns1 = ns*self.n
