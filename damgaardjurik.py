@@ -7,14 +7,16 @@ from primes import gen_prime
 
 try:
     from gmpy2 import mpz, invert
+    mpz_type = type(mpz())
     has_gmpy = True
 except ImportError:
     try:
         from gmpy import mpz, invert
+        mpz_type = type(mpz())
         has_gmpy = True
     except ImportError:
         import warnings
-        warnings.warn("Not having gmpy2 or gmpy makes this at least 10x slower")
+        warnings.warn('Not having gmpy2 or gmpy makes this at least 10x slower')
         has_gmpy = False
 
 def lcm(a,b):
@@ -40,10 +42,11 @@ class DamgaardJurik(object):
     def __init__(self, keylen=None, random=random, _state=None):
         if _state is not None:
             (self.n, self.l) = _state
-            self.keylen = len(bin(self.n)) - 2
+            self.keylen = int(ceil(log(self.n,2)))
             if has_gmpy:
                 self.n = mpz(self.n)
-                self.l = mpz(self.l)
+                if self.l is not None:
+                    self.l = mpz(self.l)
         else:
             assert keylen is not None
             self.keylen = keylen
@@ -62,15 +65,15 @@ class DamgaardJurik(object):
         if s is None:
             if isinstance(message, bytes):
                 s = int(ceil(8.0 * len(message) / self.keylen))
-            elif isinstance(message, Integral):
-                s = ceil(log(message, 2**self.keylen)) - 1
+            elif isinstance(message, (Integral, mpz_type)):
+                s = int(ceil(log(int(message), 2**self.keylen)))
         else:
             if isinstance(message, bytes):
                 if len(message) < ((self.keylen * s - 1) / 8):
-                    raise ValueError("message is too long for the given value of s")
-            elif isinstance(message, Integral):
-                if message < self.n**s:
-                    raise ValueError("message value is too large for the given value of s")
+                    raise ValueError('message is too long for the given value of s')
+            elif isinstance(message, (Integral, mpz_type)):
+                if message >= self.n**s:
+                    raise ValueError('message value is too large for the given value of s')
 
         assert s > 0
         ns = self.n**s
@@ -78,11 +81,11 @@ class DamgaardJurik(object):
         if isinstance(message, bytes):
             i = int(hexlify(message), base=16)
             return_bytes = True
-        elif isinstance(message, Integral):
+        elif isinstance(message, (Integral, mpz_type)):
             i = message
             return_bytes = False
         else:
-            raise ValueError("message must be a bytes or a number")
+            raise ValueError('message must be a bytes or a number')
         
         r = 1 << (self.keylen * (s + 1))
         while r >= ns1:
@@ -102,19 +105,19 @@ class DamgaardJurik(object):
             return int(c)
 
     def decrypt(self, message):
-        if not isinstance(self.l, Integral):
-            raise RuntimeError("This key has no private material for decryption")
+        if self.l is None:
+            raise RuntimeError('This key has no private material for decryption')
         
         if isinstance(message, bytes):
-            s = int(ceil(8.0 * len(message) / self.keylen)) - 1
+            s = int(ceil(8.0 * len(message) / self.keylen) - 1)
             c = int(hexlify(message), base=16)
             return_bytes = True
-        elif isinstance(message, Integral):
-            s = ceil(log(message, 2**self.keylen)) - 1
+        elif isinstance(message, (Integral, mpz_type)):
+            s = int(ceil(log(int(message), 2**self.keylen)) - 1)
             c = message
             return_bytes = False
         else:
-            raise ValueError("message must be a bytes or a number")
+            raise ValueError('message must be a bytes or a number')
         assert s > 0
 
         ns = self.n**s
@@ -154,10 +157,10 @@ class DamgaardJurik(object):
 
     @property
     def pubkey(self):
-        return self.n
+        return int(self.n)
     @property
     def privkey(self):
-        return (self.n, self.l)
+        return (int(self.n), int(self.l))
 
     @classmethod
     def from_pubkey(cls, pubkey):
