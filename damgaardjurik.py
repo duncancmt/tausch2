@@ -20,16 +20,23 @@ except ImportError:
         has_gmpy = False
 
 def lcm(a,b):
+    """Return the least common multiple (LCM) of the arguments"""
     return (a * b) // gcd(a,b)
 
 if not has_gmpy:
     def egcd(a, b):
+        """The Extended Euclidean Algorithm
+        In addition to finding the greatest common divisor (GCD) of the
+        arguments, also find and return the coefficients of the linear
+        combination that results in the GCD.
+        """
         if a == 0:
             return (b, 0, 1)
         else:
             g, y, x = egcd(b % a, a)
             return (g, x - (b // a) * y, y)
     def invert(a, m):
+        """Return the multiplicative inverse of a, mod m"""
         g, x, y = egcd(a, m)
         if g != 1:
             raise ValueError('modular inverse does not exist')
@@ -39,8 +46,20 @@ if not has_gmpy:
 
 
 class DamgaardJurik(object):
+    """
+    Class implementing the Damgaard-Jurik family of asymmetric cryptosystems
+
+    The Paillier cryptosystem is a specific instance of this cryptosystem with s=1
+    """
     def __init__(self, keylen=None, random=random, _state=None):
+        """Constructor:
+
+        keylen: the length (in bits) of the key modulus
+        random: (optional) a source of entropy for key generation, the default is python's random
+        _state: (do not use) a state tuple to initialize from instead of performing key generation
+        """
         if _state is not None:
+            # initialize self from given state
             (self.n, self.l) = _state
             self.keylen = int(ceil(log(self.n,2)))
             if has_gmpy:
@@ -48,11 +67,16 @@ class DamgaardJurik(object):
                 if self.l is not None:
                     self.l = mpz(self.l)
         else:
+            # generate key and initialize self
             assert keylen is not None
             self.keylen = keylen
             self.generate(random)
 
     def generate(self, random=random):
+        """Generate a keypair and initialize this instance with it
+
+        random: (optional) a source of entropy for key generation, the default is python's random
+        """
         p = gen_prime(self.keylen // 2, random=random)
         q = gen_prime(self.keylen // 2, random=random)
         if has_gmpy:
@@ -62,12 +86,23 @@ class DamgaardJurik(object):
         self.l = lcm(p-1, q-1)
 
     def encrypt(self, message, s=1, random=random):
+        """Encrypt a message with the public key
+
+        message: the message to be encrypted, may be a bytes, integer type, or DamgaardJurikPlaintext
+        s: (optional) one less than the exponent of the modulus. Determines the maximum message length.
+            The default is 1, which results in Paillier encryption. If s is None, automatically choose the
+            minimum s that will fit the message.
+        random: (optional) a source of entropy for the generation of r, a parameter for the encryption
+            the default is python's random
+        """
         if s is None:
+            # determine s from message length
             if isinstance(message, bytes):
                 s = int(ceil(8.0 * len(message) / self.keylen))
             elif isinstance(message, (Integral, mpz_type)):
                 s = int(ceil(log(int(message), 2**self.keylen)))
         else:
+            # check that the message will fit with the given s
             if isinstance(message, bytes):
                 if len(message) < ((self.keylen * s - 1) / 8):
                     raise ValueError('message is too long for the given value of s')
@@ -78,6 +113,8 @@ class DamgaardJurik(object):
         assert s > 0
         ns = self.n**s
         ns1 = ns*self.n
+
+        # format the message as an integer regardless of how it was given
         if isinstance(message, bytes):
             i = sum(ord(char) << (j * 8) for j, char in enumerate(reversed(message)))
             return_type = bytes
@@ -89,14 +126,18 @@ class DamgaardJurik(object):
             return_type = int
         else:
             raise ValueError('message must be a bytes, DamgaardJurikPlaintext, or number')
-        
+
+        # generate the random parameter r
         r = 1 << (self.keylen * (s + 1))
         while r >= ns1:
             r = random.getrandbits(self.keylen * (s + 1))
-        
+
+        # perform the encryption
         c = pow((1+self.n), i, ns1)
         c *= pow(r, ns, ns1)
         c %= ns1
+
+        # format the ciphertext to match the type of the plaintext
         if return_type is bytes:
             h = hex(int(c))[2:]
             if h[-1] == 'L':
@@ -112,9 +153,16 @@ class DamgaardJurik(object):
             raise RuntimeError('Invalid value for return_type')
 
     def decrypt(self, message):
+        """Decrypt and encrypted message. Only works if this instance has a private key available.
+
+        message: the message to be decrypted, may be a bytes, integer type, or DamgaardJurikCiphertext
+        """
+        # check that the private key is available
         if self.l is None:
             raise RuntimeError('This key has no private material for decryption')
-        
+
+        # format the ciphertext as an integer, regardless of the given type
+        # determine s from the message length
         if isinstance(message, bytes):
             s = int(ceil(8.0 * len(message) / self.keylen) - 1)
             c = sum(ord(char) << (j * 8) for j, char in enumerate(reversed(message)))
@@ -129,15 +177,18 @@ class DamgaardJurik(object):
             return_type = int
         else:
             raise ValueError('message must be a bytes, DamgaardJurikCiphertext, or number')
-        assert s > 0
 
+        assert s > 0
         ns = self.n**s
         ns1 = ns*self.n
+
+        # calculate the decryption key for the given s
         d = invert(self.l, ns) * self.l
         assert d % ns == 1
         assert d % self.l == 0
-        c = pow(c, d, ns1)
 
+        # perform the decryption
+        c = pow(c, d, ns1)
         i = 0
         for j in xrange(1, s+1):
             nj = self.n**j
@@ -156,6 +207,7 @@ class DamgaardJurik(object):
                 t1 %= nj
             i = t1
 
+        # format the plaintext to match the type of the ciphertext
         if return_type is bytes:
             h = hex(int(i))[2:]
             if h[-1] == 'L':
@@ -190,14 +242,27 @@ class DamgaardJurik(object):
         self.__init__(_state=state)
 
 class DamgaardJurikPlaintext(long):
+    """Class representing the plaintext in Damgaard-Jurik"""
     def __repr__(self):
         return 'DamgaardJurikPlaintext(%s)' % str(self)
 class DamgaardJurikCiphertext(Integral):
+    """Class representing the ciphertext in Damgaard-Jurik. Also represents the homomorphisms of Damgaard-Jurik"""
     def __init__(self, c, ns1, cache_powers=True):
+        """Constructor:
+
+        c: the ciphertext, represented as an integer type
+        ns1: the exponentiated modulus used in generating this ciphertext
+        cache_powers: (optional) if True, we cache the powers of the ciphertext that are powers of two
+            this speeds up the square-and-multiply exponentiation used if lots of homomorphic manipulation
+            takes place, the default is True
+        """
         self.c = c
         self.ns1 = ns1
         self.cache_powers = cache_powers
-        self.cache = [None]*int(ceil(log(int(ns1), 2)))
+        if cache_powers:
+            self.cache = [None]*int(ceil(log(int(ns1), 2)))
+        else:
+            self.cache = None
 
     def __repr__(self):
         return 'DamgaardJurikCiphertext(%s, %s, cache_powers=%s)' % (self.c, self.ns1, self.cache_powers)
@@ -352,3 +417,5 @@ class DamgaardJurikCiphertext(Integral):
         return NotImplemented
     def __invert__(self, other):
         return NotImplemented
+
+__all__ = [ 'DamgaardJurik', 'DamgaardJurikPlaintext', 'DamgaardJurikCiphertext' ]
