@@ -306,25 +306,27 @@ class Keccak(object):
         
         M: the string to be soaked
         """
+        r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
+
         if self.done_soaking:
             raise RuntimeError('Cannot continue soaking once squeezing has begun')
 
         self.P += M
 
-        if self.verbose:
-            print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(self.P), self.c//8))
+        if verbose:
+            print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(self.P), c//8))
 
-        for _ in xrange((len(self.P)*8)//self.r):
-            chunk, self.P = self.P[:(self.r//8)], self.P[(self.r//8):]
-            chunk += '\x00'*(self.c//8)
-            Pi=self.convertStrToTable(chunk,self.w,self.b)
+        for _ in xrange((len(self.P)*8)//r):
+            chunk, self.P = self.P[:(r//8)], self.P[(r//8):]
+            chunk += '\x00'*(c//8)
+            Pi=self.convertStrToTable(chunk,w,b)
             for y in range(5):
               for x in range(5):
                   self.S[x][y] ^= Pi[x][y]
-            self.S = self.KeccakF(self.S, self.nr, self.w, self.verbose)
+            self.S = self.KeccakF(self.S, nr, w, verbose)
 
-            if self.verbose:
-                print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, self.w))))
+            if verbose:
+                print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, w))))
 
 
     def squeeze(self, n):
@@ -334,13 +336,15 @@ class Keccak(object):
         (this method can be called many times to produce as much output as needed)
         """
         # TODO: this method needs a bit of cleanup to be more elegant
+        w, r, nr, verbose = self.w, self.r, self.nr, self.verbose
+        
         if not self.done_soaking:
             assert self.output_cache == ''
-            self.P = self.pad10star1(self.P, self.r)
+            self.P = self.pad10star1(self.P, r)
             self.soak('')
             self.done_soaking = True
-            if self.verbose:
-                print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, self.w))))
+            if verbose:
+                print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, w))))
 
         assert self.P == ''
 
@@ -353,19 +357,19 @@ class Keccak(object):
         outputLength -= len(self.output_cache)
         self.output_cache = ''
             
-        while outputLength>=self.r//8:
-            string=self.convertTableToStr(self.S, self.w)
-            retval += string[:self.r//8]
-            outputLength -= self.r//8
-            self.S = self.KeccakF(self.S, self.nr, self.w, self.verbose)
+        while outputLength>=r//8:
+            string=self.convertTableToStr(self.S, w)
+            retval += string[:r//8]
+            outputLength -= r//8
+            self.S = self.KeccakF(self.S, nr, w, verbose)
 
         if outputLength > 0:
-            string=self.convertTableToStr(self.S, self.w)
-            self.S = self.KeccakF(self.S, self.nr, self.w, self.verbose)
+            string=self.convertTableToStr(self.S, w)
+            self.S = self.KeccakF(self.S, nr, w, verbose)
             temp, self.output_cache = string[:outputLength], string[outputLength:]
             retval += temp
             
-        if self.verbose:
-            print("Value after squeezing : %s" % (hexlify(self.convertTableToStr(self.S, self.w))))
+        if verbose:
+            print("Value after squeezing : %s" % (hexlify(self.convertTableToStr(self.S, w))))
 
         return retval
