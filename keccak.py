@@ -39,7 +39,6 @@ class Keccak(object):
             raise KeccakError('r must be a multiple of 8 in this implementation')
         self.r = r
         self.c = c
-
         self.b = b = r+c
         if b not in [25, 50, 100, 200, 400, 800, 1600]:
             raise KeccakError('b value not supported - use 25, 50, 100, 200, 400, 800 or 1600')
@@ -49,8 +48,8 @@ class Keccak(object):
 
         self.done_soaking = False
 
-        if self.verbose:
-            print("Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25))
+        if verbose:
+            print "Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25)
 
         # Initialisation of state
         self.S = [[0,0,0,0,0],
@@ -132,12 +131,12 @@ class Keccak(object):
         state: state of the sponge function
         info: a string of characters used as identifier"""
 
-        print("Current value of state: %s" % (info))
+        print "Current value of state: %s" % (info)
         for y in range(5):
             line=[]
             for x in range(5):
                  line.append(hex(state[x][y]))
-            print('\t%s' % line)
+            print '\t%s' % line
 
     ### Conversion functions String <-> Table (and vice-versa)
 
@@ -294,7 +293,7 @@ class Keccak(object):
         return M
 
     def __call__(self, M):
-        """Does the same as soaking"""
+        """Does the same as soak"""
         self.soak(M)
 
     def soak(self, M):
@@ -324,16 +323,23 @@ class Keccak(object):
             if verbose:
                 print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, w))))
 
+    def digest(self, n=64):
+        """Does the same as squeeze"""
+        return self.squeeze(n)
+
+    def hexdigest(self, n=64):
+        """Convenience function that returns the hexadecimal version of the digest"""
+        return hexlify(self.squeeze(n))
 
     def squeeze(self, n):
-        """Perform the squeezing phase of Keccak: arbitrary-length output is produced from the internal state
+        """Perform the squeezing phase of Keccak: arbitrary-length digest output is produced from the internal state
 
         n: the length (in bytes) of the output to produce
         (this method can be called many times to produce as much output as needed)
         """
-        # TODO: this method needs a bit of cleanup to be more elegant
         w, r, nr, verbose = self.w, self.r, self.nr, self.verbose
-        
+
+        # pad the remaining input and add it to the internal state
         if not self.done_soaking:
             assert self.output_cache == ''
             self.P = self.pad10star1(self.P, r)
@@ -344,6 +350,7 @@ class Keccak(object):
 
         assert self.P == ''
 
+        # if there is any leftover output from a previous squeezing, return it
         retval = ''
         outputLength = n
         if outputLength <= len(self.output_cache):
@@ -352,13 +359,15 @@ class Keccak(object):
         retval += self.output_cache
         outputLength -= len(self.output_cache)
         self.output_cache = ''
-            
+        
+        # perform the squeezing operation up to within a block boundary of the output
         while outputLength>=r//8:
             string=self.convertTableToStr(self.S, w)
             retval += string[:r//8]
             outputLength -= r//8
             self.S = self.KeccakF(self.S, nr, w, verbose)
 
+        # fill the rest of the output and save the leftovers, if any
         if outputLength > 0:
             string=self.convertTableToStr(self.S, w)
             self.S = self.KeccakF(self.S, nr, w, verbose)
