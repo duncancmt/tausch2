@@ -378,3 +378,5 @@ class Keccak(object):
             print("Value after squeezing : %s" % (hexlify(self.convertTableToStr(self.S, w))))
 
         return retval
+
+__all__ = ['Keccak', 'KeccakError']
