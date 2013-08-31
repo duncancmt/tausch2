@@ -79,7 +79,7 @@ class DamgaardJurik(object):
         ns = self.n**s
         ns1 = ns*self.n
         if isinstance(message, bytes):
-            i = int(hexlify(message), base=16)
+            i = sum(ord(char) << (j * 8) for j, char in enumerate(reversed(message)))
             return_type = bytes
         elif isinstance(message, DamgaardJurikPlaintext):
             i = int(message)
@@ -117,7 +117,7 @@ class DamgaardJurik(object):
         
         if isinstance(message, bytes):
             s = int(ceil(8.0 * len(message) / self.keylen) - 1)
-            c = int(hexlify(message), base=16)
+            c = sum(ord(char) << (j * 8) for j, char in enumerate(reversed(message)))
             return_type = bytes
         elif isinstance(message, DamgaardJurikCiphertext):
             s = int(ceil(log(int(message), 2**self.keylen)) - 1)
