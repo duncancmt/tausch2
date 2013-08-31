@@ -29,7 +29,6 @@ class Keccak(object):
 
         r: bitrate (default 1024)
         c: capacity (default 576)
-        d: diversifier (default 0), must be between 0 and 255, inclusive
         verbose: print the details of computations(default:False)
         r + c must be 25, 50, 100, 200, 400, 800 or 1600 (recommended 1600)
         see http://keccak.noekeon.org/NoteOnKeccakParametersAndUsage.pdf
@@ -41,9 +40,6 @@ class Keccak(object):
         self.r = r
         self.c = c
 
-        if d != 0:
-            raise NotImplementedError
-        self.d = d
         self.b = b = r+c
         if b not in [25, 50, 100, 200, 400, 800, 1600]:
             raise KeccakError('b value not supported - use 25, 50, 100, 200, 400, 800 or 1600')
