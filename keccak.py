@@ -5,7 +5,8 @@
 # 
 # Implementation by Renaud Bauvin,
 # hereby denoted as "the implementer".
-# 
+# Heavy modifications to make this more idiomatic by Duncan Townsend.
+#
 # To the extent possible under law, the implementer has waived all copyright
 # and related or neighboring rights to the source code in this file.
 # http://creativecommons.org/publicdomain/zero/1.0/
@@ -23,26 +24,46 @@ class Keccak(object):
     """
     Class implementing the Keccak sponge function
     """
-    def __init__(self, b=1600):
+    def __init__(self, r=1024,c=576,d=0,verbose=False):
         """Constructor:
 
-        b: parameter b, must be 25, 50, 100, 200, 400, 800 or 1600 (default value)"""
-        self.setB(b)
-
-    def setB(self,b):
-        """Set the value of the parameter b (and thus w,l and nr)
-
-        b: parameter b, must be choosen among [25, 50, 100, 200, 400, 800, 1600]
+        r: bitrate (default 1024)
+        c: capacity (default 576)
+        d: diversifier (default 0), must be between 0 and 255, inclusive
+        verbose: print the details of computations(default:False)
+        r + c must be 25, 50, 100, 200, 400, 800 or 1600 (recommended 1600)
+        see http://keccak.noekeon.org/NoteOnKeccakParametersAndUsage.pdf
         """
 
+        self.verbose = verbose
+        if (r<0) or (r%8!=0):
+            raise KeccakError('r must be a multiple of 8 in this implementation')
+        self.r = r
+        self.c = c
+
+        if d != 0:
+            raise NotImplementedError
+        self.d = d
+        self.b = b = r+c
         if b not in [25, 50, 100, 200, 400, 800, 1600]:
             raise KeccakError('b value not supported - use 25, 50, 100, 200, 400, 800 or 1600')
-
-        # Update all the parameters based on the used value of b
-        self.b=b
-        self.w=b//25
+        self.w = w = b//25
         self.l=int(math.log(self.w,2))
         self.nr=12+2*self.l
+
+        self.done_soaking = False
+
+        if self.verbose:
+            print("Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25))
+
+        # Initialisation of state
+        self.S = [[0,0,0,0,0],
+                  [0,0,0,0,0],
+                  [0,0,0,0,0],
+                  [0,0,0,0,0],
+                  [0,0,0,0,0]]
+        self.P = ''
+        self.output_cache = ''
 
     # Constants
 
@@ -73,38 +94,42 @@ class Keccak(object):
         0x8000000080008008]
 
     ## Rotation offsets
-    r=[[0,    36,     3,    41,    18]    ,
-       [1,    44,    10,    45,     2]    ,
-       [62,    6,    43,    15,    61]    ,
-       [28,   55,    25,    21,    56]    ,
-       [27,   20,    39,     8,    14]    ]
+    rot_off=[[0,    36,     3,    41,    18]    ,
+             [1,    44,    10,    45,     2]    ,
+             [62,    6,    43,    15,    61]    ,
+             [28,   55,    25,    21,    56]    ,
+             [27,   20,    39,     8,    14]    ]
 
     ## Generic utility functions
 
-    def rot(self,x,n):
+    @staticmethod
+    def rot(x,n,w):
         """Bitwise rotation (to the left) of n bits considering the \
         string of bits is w bits long"""
 
-        n = n%self.w
-        return ((x>>(self.w-n))+(x<<n))%(1<<self.w)
+        n = n%w
+        return ((x>>(w-n))+(x<<n))%(1<<w)
 
-    def fromStringToLane(self, string):
+    @staticmethod
+    def fromStringToLane(string):
         """Convert a string of bytes to a lane value"""
 
         #Perform the modification
         return sum(ord(char) << (j * 8) for j, char in enumerate(string))
 
-    def fromLaneToString(self, lane):
+    @staticmethod
+    def fromLaneToString(lane, w):
         """Convert a lane value to a string of bytes"""
 
         #Perform the modification
         h = hex(int(lane))[2:]
         if h[-1] == 'L':
             h = h[:-1]
-        h = '0'*(self.w//4 - len(h)) + h
+        h = '0'*(w//4 - len(h)) + h
         return unhexlify(h)[::-1]
 
-    def printState(self, state, info):
+    @staticmethod
+    def printState(state, info):
         """Print on screen the state of the sponge function preceded by \
         string info
 
@@ -120,15 +145,16 @@ class Keccak(object):
 
     ### Conversion functions String <-> Table (and vice-versa)
 
-    def convertStrToTable(self,string):
+    @classmethod
+    def convertStrToTable(cls,string,w,b):
         """Convert a string of bytes to its 5x5 matrix representation
 
         string: string of bytes"""
 
         #Check that input paramaters
-        if self.w%8!= 0:
+        if w%8!= 0:
             raise KeccakError("w is not a multiple of 8")
-        if len(string)!=(self.b)//8:
+        if len(string)!=b//8:
             raise KeccakError("string can't be divided in 25 blocks of w bits\
             i.e. string must have exactly b bits")
 
@@ -140,15 +166,16 @@ class Keccak(object):
                 [0,0,0,0,0]]
         for x in xrange(5):
             for y in xrange(5):
-                offset=((5*y+x)*self.w)//8
-                output[x][y]=self.fromStringToLane(string[offset:offset+(self.w//8)])
+                offset=((5*y+x)*w)//8
+                output[x][y]=cls.fromStringToLane(string[offset:offset+(w//8)])
         return output
 
-    def convertTableToStr(self,table):
+    @classmethod
+    def convertTableToStr(cls, table, w):
         """Convert a 5x5 matrix representation to its string representation"""
 
         #Check input format
-        if self.w%8!= 0:
+        if w%8!= 0:
             raise KeccakError("w is not a multiple of 8")
         if (len(table)!=5) or (False in [len(row)==5 for row in table]):
             raise KeccakError("table must be 5x5")
@@ -157,11 +184,12 @@ class Keccak(object):
         output=[None]*25
         for x in range(5):
             for y in range(5):
-                output[5*y+x]=self.fromLaneToString(table[x][y])
+                output[5*y+x]=cls.fromLaneToString(table[x][y], w)
         output = ''.join(output)
         return output
 
-    def Round(self,A,RCfixed):
+    @classmethod
+    def Round(cls,A,RCfixed,w):
         """Perform one round of computation as defined in the Keccak-f permutation
 
         A: current state (5x5 matrix)
@@ -182,7 +210,7 @@ class Keccak(object):
             C[x] = A[x][0]^A[x][1]^A[x][2]^A[x][3]^A[x][4]
 
         for x in range(5):
-            D[x] = C[(x-1)%5]^self.rot(C[(x+1)%5],1)
+            D[x] = C[(x-1)%5]^cls.rot(C[(x+1)%5],1,w)
 
         for x in range(5):
             for y in range(5):
@@ -191,7 +219,7 @@ class Keccak(object):
         #Rho and Pi steps
         for x in range(5):
           for y in range(5):
-                B[y][(2*x+3*y)%5] = self.rot(A[x][y], self.r[x][y])
+                B[y][(2*x+3*y)%5] = cls.rot(A[x][y], cls.rot_off[x][y], w)
 
         #Chi step
         for x in range(5):
@@ -203,33 +231,38 @@ class Keccak(object):
 
         return A
 
-    def KeccakF(self,A, verbose=False):
+    @classmethod
+    def KeccakF(cls, A, nr, w, verbose):
         """Perform Keccak-f function on the state A
 
         A: 5x5 matrix containing the state
+        nr: number of rounds to perform
+        w: lane width
         verbose: a boolean flag activating the printing of intermediate computations
         """
 
         if verbose:
-            self.printState(A,"Before first round")
+            cls.printState(A,"Before first round")
 
-        for i in range(self.nr):
+        for i in range(nr):
             #NB: result is truncated to lane size
-            A = self.Round(A,self.RC[i]%(1<<self.w))
+            A = cls.Round(A,cls.RC[i]%(1<<w),w)
 
             if verbose:
-                  self.printState(A,"Satus end of round #%d/%d" % (i+1,self.nr))
+                cls.printState(A,"Satus end of round #%d/%d" % (i+1,nr))
 
         return A
 
     ### Padding rule
 
-    def pad10star1(self, M, n, M_bit_len=None):
+    @staticmethod
+    def pad10star1(M, n, M_bit_len=None):
         """Pad M with the pad10*1 padding rule to reach a length multiple of r bits
 
         M: string to be padded
         n: block length in bits (must be a multiple of 8)
         M_bit_len: length of M (in bits) only supply this argument if M is not an octet stream
+        (M_bit_len functionality is unused in this implementation)
         """
 
         # Check the parameter n
@@ -264,69 +297,75 @@ class Keccak(object):
 
         return M
 
-    def Keccak(self,M,r=1024,c=576,n=1024,verbose=False):
-        """Compute the Keccak[r,c,d] sponge function on message M
+    def __call__(self, M):
+        """Does the same as soaking"""
+        self.soak(M)
 
-        M: string to be hashed
-        r: bitrate in bits (default: 1024)
-        c: capacity in bits (default: 576)
-        n: length of output in bits (default: 1024),
-        verbose: print the details of computations(default:False)
+    def soak(self, M):
+        """Perform the soaking phase of Keccak: data is mixed into the internal state
+        
+        M: the string to be soaked
         """
+        if self.done_soaking:
+            raise RuntimeError('Cannot continue soaking once squeezing has begun')
 
-        #Check the inputs
-        if (r<0) or (r%8!=0):
-            raise KeccakError('r must be a multiple of 8 in this implementation')
-        if (n%8!=0):
-            raise KeccakError('outputLength must be a multiple of 8')
-        self.setB(r+c)
+        self.P += M
 
-        if verbose:
-            print("Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25))
+        if self.verbose:
+            print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(self.P), self.c//8))
 
-        #Compute lane length (in bits)
-        w=(r+c)//25
-
-        # Initialisation of state
-        S=[[0,0,0,0,0],
-           [0,0,0,0,0],
-           [0,0,0,0,0],
-           [0,0,0,0,0],
-           [0,0,0,0,0]]
-
-        #Padding of messages
-        P = self.pad10star1(M, r)
-
-        if verbose:
-            print("String ready to be absorbed: %s (will be completed by %d x '00')" % (hexlify(P), c//8))
-
-        #Absorbing phase
-        for i in range((len(P)*8)//r):
-            print 'calling convertStrToTable'
-            Pi=self.convertStrToTable(P[i*(r//8):(i+1)*(r//8)]+'\x00'*(c//8))
-
+        for _ in xrange((len(self.P)*8)//self.r):
+            chunk, self.P = self.P[:(self.r//8)], self.P[(self.r//8):]
+            chunk += '\x00'*(self.c//8)
+            Pi=self.convertStrToTable(chunk,self.w,self.b)
             for y in range(5):
               for x in range(5):
-                  S[x][y] = S[x][y]^Pi[x][y]
-            S = self.KeccakF(S, verbose)
+                  self.S[x][y] ^= Pi[x][y]
+            self.S = self.KeccakF(self.S, self.nr, self.w, self.verbose)
 
-        if verbose:
-            print("Value after absorption : %s" % (hexlify(self.convertTableToStr(S))))
+            if self.verbose:
+                print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, self.w))))
 
-        #Squeezing phase
-        Z = ''
+
+    def squeeze(self, n):
+        """Perform the squeezing phase of Keccak: arbitrary-length output is produced from the internal state
+
+        n: the length (in bytes) of the output to produce
+        (this method can be called many times to produce as much output as needed)
+        """
+        # TODO: this method needs a bit of cleanup to be more elegant
+        if not self.done_soaking:
+            assert self.output_cache == ''
+            self.P = self.pad10star1(self.P, self.r)
+            self.soak('')
+            self.done_soaking = True
+            if self.verbose:
+                print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, self.w))))
+
+        assert self.P == ''
+
+        retval = ''
         outputLength = n
-        while outputLength>0:
-            string=self.convertTableToStr(S)
-            Z = Z + string[:r//8]
-            outputLength -= r
-            if outputLength>0:
-                S = self.KeccakF(S, verbose)
+        if outputLength <= len(self.output_cache):
+            retval, self.output_cache = self.output_cache[:outputLength], self.output_cache[outputLength:]
+            return retval
+        retval += self.output_cache
+        outputLength -= len(self.output_cache)
+        self.output_cache = ''
+            
+        while outputLength>=self.r//8:
+            string=self.convertTableToStr(self.S, self.w)
+            retval += string[:self.r//8]
+            outputLength -= self.r//8
+            self.S = self.KeccakF(self.S, self.nr, self.w, self.verbose)
 
-            # NB: done by block of length r, could have to be cut if outputLength
-            #     is not a multiple of r
+        if outputLength > 0:
+            string=self.convertTableToStr(self.S, self.w)
+            self.S = self.KeccakF(self.S, self.nr, self.w, self.verbose)
+            temp, self.output_cache = string[:outputLength], string[outputLength:]
+            retval += temp
+            
+        if self.verbose:
+            print("Value after squeezing : %s" % (hexlify(self.convertTableToStr(self.S, self.w))))
 
-        if verbose:
-            print("Value after squeezing : %s" % (hexlify(self.convertTableToStr(S))))
-
-        return Z[:n//8]
+        return retval
