@@ -89,6 +89,7 @@ class DamgaardJurik(object):
         """Encrypt a message with the public key
 
         message: the message to be encrypted, may be a bytes, integer type, or DamgaardJurikPlaintext
+            (bytes are interpreted as little-endian, least-significant-byte first)
         s: (optional) one less than the exponent of the modulus. Determines the maximum message length.
             The default is 1, which results in Paillier encryption. If s is None, automatically choose the
             minimum s that will fit the message.
@@ -116,7 +117,7 @@ class DamgaardJurik(object):
 
         # format the message as an integer regardless of how it was given
         if isinstance(message, bytes):
-            i = sum(ord(char) << (j * 8) for j, char in enumerate(reversed(message)))
+            i = sum(ord(char) << (j * 8) for j, char in enumerate(message))
             return_type = bytes
         elif isinstance(message, DamgaardJurikPlaintext):
             i = int(message)
@@ -144,7 +145,7 @@ class DamgaardJurik(object):
                 h = h[:-1]
             if len(h) % 2 == 1:
                 h = '0'+h
-            return unhexlify(h)
+            return unhexlify(h)[::-1]
         elif return_type is DamgaardJurikCiphertext:
             return DamgaardJurikCiphertext(c, ns1)
         elif return_type is int:
@@ -156,6 +157,7 @@ class DamgaardJurik(object):
         """Decrypt and encrypted message. Only works if this instance has a private key available.
 
         message: the message to be decrypted, may be a bytes, integer type, or DamgaardJurikCiphertext
+            (bytes are interpreted as little-endian, least-significant-byte first)
         """
         # check that the private key is available
         if self.l is None:
@@ -165,7 +167,7 @@ class DamgaardJurik(object):
         # determine s from the message length
         if isinstance(message, bytes):
             s = int(ceil(8.0 * len(message) / self.keylen) - 1)
-            c = sum(ord(char) << (j * 8) for j, char in enumerate(reversed(message)))
+            c = sum(ord(char) << (j * 8) for j, char in enumerate(message))
             return_type = bytes
         elif isinstance(message, DamgaardJurikCiphertext):
             s = int(ceil(log(int(message), 2**self.keylen)) - 1)
@@ -214,7 +216,7 @@ class DamgaardJurik(object):
                 h = h[:-1]
             if len(h) % 2 == 1:
                 h = '0'+h
-            return unhexlify(h)
+            return unhexlify(h)[::-1]
         elif return_type is DamgaardJurikPlaintext:
             return DamgaardJurikPlaintext(i)
         elif return_type is int:
