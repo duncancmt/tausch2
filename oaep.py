@@ -1,5 +1,5 @@
 import random
-from operator import xor
+from operator import xor, or_
 from itertools import *
 
 from keccak import Keccak
@@ -111,8 +111,8 @@ def unoaep_keccak(m, label='', hash_len=32, keccak_args=dict()):
 
     # check that lhash matches, the separator is correct, and the leading NUL is preserved
     # without leaking which one failed
-    if sum([ sum(imap(xor, imap(ord, lhash),
-                           imap(ord, lhash_))) == 0,
+    if sum([ reduce(or_, imap(xor, imap(ord, lhash),
+                                   imap(ord, lhash_)), 0) == 0,
              separator == '\x01',
              Y == '\x00' ]) != 3:
         raise ValueError("Decryption failed")
