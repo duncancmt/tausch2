@@ -16,7 +16,7 @@ def int2bytes(i, length=None):
         assert length % 8 == 0
         assert length >= i.bit_length()
         length //= 8
-    elif math.log(i, 256) >= length:
+    elif i != 0 and log(i, 256) >= length:
         raise ValueError("Integer too large to be represented in desired length")
 
     # Oh BDFL, forgive us our abuses!
