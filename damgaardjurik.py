@@ -263,6 +263,9 @@ class DamgaardJurikCiphertext(Integral):
         self.cache_powers = cache_powers
         if cache_powers:
             self.cache = [None]*int(ceil(log(int(ns1), 2)))
+            self.cache[0] = c
+            for i in xrange(1, len(self.cache)):
+                self.cache[i] = self.cache[i-1]**2
         else:
             self.cache = None
 
@@ -281,9 +284,21 @@ class DamgaardJurikCiphertext(Integral):
         return self + other
 
     def __sub__(self, other):
-        raise NotImplementedError
+        if isinstance(other, DamgaardJurikCiphertext):
+            if self.ns1 != other.ns1:
+                raise ValueError('Cannot subtract ciphertexts that belong to different keys')
+            return type(self)(self.c * invert(other.c, self.ns1) % self.ns1, self.ns1, self.cache_powers)
+        else:
+            # other is a int or long
+            return type(self)(self.c * invert(other, self.ns1) % self.ns1, self.ns1, self.cache_powers)
     def __rsub__(self, other):
-        raise NotImplementedError
+        if isinstance(other, DamgaardJurikCiphertext):
+            if self.ns1 != other.ns1:
+                raise ValueError('Cannot subtract ciphertexts that belong to different keys')
+            return type(self)(other.c * invert(self.c, self.ns1) % self.ns1, self.ns1, self.cache_powers)
+        else:
+            # other is a int or long
+            return type(self)(other * invert(self.c, self.ns1) % self.ns1, self.ns1, self.cache_powers)
         
     def __mul__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
@@ -291,12 +306,15 @@ class DamgaardJurikCiphertext(Integral):
         other %= self.ns1
         if self.cache_powers:
             retval = 1
+            garbage = 1
             for i, b in enumerate(reversed(bin(other)[2:])):
                 if b == '1':
-                    if self.cache[i] is None:
-                        self.cache[i] = pow(self.c, 1 << i, self.ns1)
                     retval *= self.cache[i]
                     retval %= self.ns1
+                else:
+                    garbage *= self.cache[i]
+                    garbage %= self.ns1
+                garbage = retval
             return type(self)(retval, self.ns1, self.cache_powers)
         else:
             return type(self)(pow(self.c, other, self.ns1), self.ns1, self.cache_powers)
@@ -323,6 +341,11 @@ class DamgaardJurikCiphertext(Integral):
         raise NotImplementedError
     def __rdivmod__(self, other):
         raise NotImplementedError
+
+    def __neg__(self, other):
+        return type(self)(invert(self.c, self.ns1), self.ns1, self.cache_powers)
+    def __pos__(self, other):
+        return self
 
     def __lt__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
@@ -410,10 +433,6 @@ class DamgaardJurikCiphertext(Integral):
     def __ixor__(self, other):
         return NotImplemented
     def __ior__(self, other):
-        return NotImplemented
-    def __neg__(self, other):
-        return NotImplemented
-    def __pos__(self, other):
         return NotImplemented
     def __abs__(self, other):
         return NotImplemented
