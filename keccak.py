@@ -322,6 +322,7 @@ class Keccak(object):
 
             if verbose:
                 print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, w))))
+        assert len(self.P) < r // 8
 
     def digest(self, n=64):
         """Does the same as squeeze"""
@@ -343,6 +344,7 @@ class Keccak(object):
         if not self.done_soaking:
             assert self.output_cache == ''
             self.P = self.pad10star1(self.P, r)
+            assert len(self.P) == r // 8
             self.soak('')
             self.done_soaking = True
             if verbose:
