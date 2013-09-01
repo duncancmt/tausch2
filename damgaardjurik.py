@@ -55,6 +55,7 @@ class DamgaardJurik(object):
         """Constructor:
 
         keylen: the length (in bits) of the key modulus
+            (the key modulus may be a few bits longer than specified, but keylen is the minimum)
         random: (optional) a source of entropy for key generation, the default is python's random
         _state: (do not use) a state tuple to initialize from instead of performing key generation
         """
@@ -77,12 +78,13 @@ class DamgaardJurik(object):
 
         random: (optional) a source of entropy for key generation, the default is python's random
         """
-        p = gen_prime(self.keylen // 2, random=random)
-        q = gen_prime(self.keylen // 2, random=random)
-        if has_gmpy:
-            p = mpz(p)
-            q = mpz(q)
+        prime_len = int(ceil(self.keylen / 2.0))
+        p = gen_prime(prime_len+1, random=random)
+        q = gen_prime(prime_len, random=random)
+
         self.n = p * q
+        if has_gmpy:
+            self.n = mpz(self.n)
         self.l = lcm(p-1, q-1)
 
     def encrypt(self, message, s=1, random=random):
