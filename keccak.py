@@ -25,7 +25,7 @@ class Keccak(object):
     """
     Class implementing the Keccak sponge function
     """
-    def __init__(self, r=1024,c=576,d=0,verbose=False):
+    def __init__(self, r=1024,c=576,verbose=False):
         """Constructor:
 
         r: bitrate (default 1024)
