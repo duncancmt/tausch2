@@ -1,4 +1,4 @@
-implement duplex Keccak
+implement duplex Keccak (and test cases)
 write tests
 fix timing attacks in Damgaard-Jurik
 implement division in DamgaardJurikCiphertext
