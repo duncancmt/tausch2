@@ -1,9 +1,9 @@
 import random
-from math import ceil, log
+from math import ceil, floor, log
 from fractions import gcd
 from numbers import Integral
-from binascii import hexlify, unhexlify
 from primes import gen_prime
+from intbytes import int2bytes, bytes2int
 
 try:
     from gmpy2 import mpz, invert
@@ -96,28 +96,10 @@ class DamgaardJurik(object):
         random: (optional) a source of entropy for the generation of r, a parameter for the encryption
             the default is python's random
         """
-        if s is None:
-            # determine s from message length
-            if isinstance(message, bytes):
-                s = int(ceil(8.0 * len(message) / self.keylen))
-            elif isinstance(message, (Integral, mpz_type)):
-                s = int(ceil(log(int(message), 2**self.keylen)))
-        else:
-            # check that the message will fit with the given s
-            if isinstance(message, bytes):
-                if len(message) < ((self.keylen * s - 1) / 8):
-                    raise ValueError('message is too long for the given value of s')
-            elif isinstance(message, (Integral, mpz_type)):
-                if message >= self.n**s:
-                    raise ValueError('message value is too large for the given value of s')
-
-        assert s > 0
-        ns = self.n**s
-        ns1 = ns*self.n
 
         # format the message as an integer regardless of how it was given
         if isinstance(message, bytes):
-            i = sum(ord(char) << (j * 8) for j, char in enumerate(message))
+            i = bytes2int(message)
             return_type = bytes
         elif isinstance(message, DamgaardJurikPlaintext):
             i = int(message)
@@ -127,6 +109,18 @@ class DamgaardJurik(object):
             return_type = int
         else:
             raise ValueError('message must be a bytes, DamgaardJurikPlaintext, or number')
+
+        # check/calculate s
+        if s is None:
+            # determine s from message length
+            s = int(ceil(log(i, int(self.n))))
+            assert s > 0
+        elif i >= self.n**s: # check that the message will fit with the given s
+            raise ValueError('message value is too large for the given value of s')
+
+        # utility constants
+        ns = self.n**s
+        ns1 = ns*self.n
 
         # generate the random parameter r
         r = 1 << (self.keylen * (s + 1))
@@ -140,12 +134,7 @@ class DamgaardJurik(object):
 
         # format the ciphertext to match the type of the plaintext
         if return_type is bytes:
-            h = hex(int(c))[2:]
-            if h[-1] == 'L':
-                h = h[:-1]
-            if len(h) % 2 == 1:
-                h = '0'+h
-            return unhexlify(h)[::-1]
+            return int2bytes(c, int(ceil(log(int(self.n), 2)*(s+1)/8.0)))
         elif return_type is DamgaardJurikCiphertext:
             return DamgaardJurikCiphertext(c, ns1)
         elif return_type is int:
@@ -164,25 +153,26 @@ class DamgaardJurik(object):
             raise RuntimeError('This key has no private material for decryption')
 
         # format the ciphertext as an integer, regardless of the given type
-        # determine s from the message length
         if isinstance(message, bytes):
-            s = int(ceil(8.0 * len(message) / self.keylen) - 1)
-            c = sum(ord(char) << (j * 8) for j, char in enumerate(message))
+            c = bytes2int(message)
             return_type = bytes
         elif isinstance(message, DamgaardJurikCiphertext):
-            s = int(ceil(log(int(message), 2**self.keylen)) - 1)
             c = int(message)
             return_type = DamgaardJurikPlaintext
         elif isinstance(message, (Integral, mpz_type)):
-            s = int(ceil(log(int(message), 2**self.keylen)) - 1)
             c = message
             return_type = int
         else:
             raise ValueError('message must be a bytes, DamgaardJurikCiphertext, or number')
 
+        # determine s from the message length
+        s = int(ceil(log(c, int(self.n)) - 1))
         assert s > 0
+
+        # utility constants
         ns = self.n**s
         ns1 = ns*self.n
+        assert c < ns1
 
         # calculate the decryption key for the given s
         d = invert(self.l, ns) * self.l
@@ -211,12 +201,7 @@ class DamgaardJurik(object):
 
         # format the plaintext to match the type of the ciphertext
         if return_type is bytes:
-            h = hex(int(i))[2:]
-            if h[-1] == 'L':
-                h = h[:-1]
-            if len(h) % 2 == 1:
-                h = '0'+h
-            return unhexlify(h)[::-1]
+            return int2bytes(i, int(floor(self.keylen*s/8.0)))
         elif return_type is DamgaardJurikPlaintext:
             return DamgaardJurikPlaintext(i)
         elif return_type is int:
