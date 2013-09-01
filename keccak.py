@@ -12,7 +12,8 @@
 # http://creativecommons.org/publicdomain/zero/1.0/
 
 import math
-from binascii import hexlify, unhexlify
+from binascii import hexlify
+from intbytes import int2bytes, bytes2int
 
 class KeccakError(Exception):
     """Class of error used in the Keccak implementation
@@ -108,20 +109,12 @@ class Keccak(object):
     @staticmethod
     def fromStringToLane(string):
         """Convert a string of bytes to a lane value"""
-
-        #Perform the modification
-        return sum(ord(char) << (j * 8) for j, char in enumerate(string))
+        return bytes2int(string)
 
     @staticmethod
     def fromLaneToString(lane, w):
         """Convert a lane value to a string of bytes"""
-
-        #Perform the modification
-        h = hex(int(lane))[2:]
-        if h[-1] == 'L':
-            h = h[:-1]
-        h = '0'*(w//4 - len(h)) + h
-        return unhexlify(h)[::-1]
+        return int2bytes(lane, w//8)
 
     @staticmethod
     def printState(state, info):
