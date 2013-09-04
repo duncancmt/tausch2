@@ -1,7 +1,7 @@
 implement duplex Keccak
 write tests
     damgaardjurik.py
-        key generation
+        *key generation
         encryption
         decryption
         decoding and encoding of byte streams
@@ -37,4 +37,5 @@ write tests
         timing
         durability
 fix timing attacks in Damgaard-Jurik
+see if Damgaard-Jurik should be using safe primes
 implement division in DamgaardJurikCiphertext
