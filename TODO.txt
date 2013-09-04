@@ -1,4 +1,40 @@
-implement duplex Keccak (and test cases)
+implement duplex Keccak
 write tests
+    damgaardjurik.py
+        key generation
+        encryption
+        decryption
+        decoding and encoding of byte streams
+        handling of DamgaardJurikPlaintext and DamgaardJurikCiphertext classes
+        homomophisms
+            addition
+            subtraction
+            multiplication
+            division
+            negation
+            comparison
+        pickling and state storage
+        deterministic initialization
+        timing
+    intbytes.py
+        standard vectors
+        random vectors
+    keccak.py
+        *simplex
+        duplex
+    mnemonic.py
+        standard vectors
+        random vectors
+        durability
+            transcription errors
+            length errors
+            checksum errors
+            recovery?
+    oaep.py
+        find standard vectors
+        standard vectors
+        random vectors
+        timing
+        durability
 fix timing attacks in Damgaard-Jurik
 implement division in DamgaardJurikCiphertext
