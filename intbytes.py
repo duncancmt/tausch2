@@ -31,3 +31,5 @@ def bytes2int(b):
     """
     assert isinstance(b, bytes)
     return sum(ord(char) << (i * 8) for i, char in enumerate(b))
+
+__all__ = ['int2bytes', 'bytes2int']

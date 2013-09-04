@@ -3,7 +3,7 @@ from operator import xor, or_
 from itertools import *
 
 from keccak import Keccak
-from binascii import hexlify, unhexlify
+from intbytes import int2bytes, bytes2int
 
 def oaep_keccak(m, label='', out_len=None, hash_len=32, random=random, keccak_args=dict()):
     """Perform OAEP (as specified by PKCS#1v2.1) with Keccak as the one-way function
@@ -34,11 +34,7 @@ def oaep_keccak(m, label='', out_len=None, hash_len=32, random=random, keccak_ar
 
     # generate rand_seed, a hash_len-byte random string
     rand_seed = random.getrandbits(hash_len*8)
-    rand_seed = hex(int(rand_seed))[2:]
-    if rand_seed[-1] == 'L':
-        rand_seed = rand_seed[:-1]
-    rand_seed = '0'*(hash_len*2 - len(rand_seed)) + rand_seed
-    rand_seed = unhexlify(rand_seed)
+    rand_seed = int2bytes(rand_seed)
 
     # expand rand_seed to the length of padded
     k = Keccak(**keccak_args)
