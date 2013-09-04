@@ -63,7 +63,7 @@ extreme_outputs = ('EADAF5BA2AD6A2F6F338FCE0E1EFDAD2A61BB38F6BE6068B01093977ACF9
                    '9B7168B4494A80A86408E6B9DC4E5A1837C85DD8FF452ED410F2832959C08C8C0D040A892EB9A755776372D4A8732315',
                    '3E122EDAF37398231CFACA4C7C216C9D66D5B899EC1D7AC617C40C7261906A45FC01617A021E5DA3BD8D4182695B5CB785A28237CBB167590E34718E56D8AAB8')
 
-for ((r, c, n), output) in zip(args, extreme_outputs):
+for ((r, c, n), expected) in zip(args, extreme_outputs):
     print "testing Keccak with r=%d, c=%d, n=%d" % (r, c, n)
     print "we will print %d periods (.) before the next test" % (extreme_repeats/progress_interval)
     k = keccak.Keccak(r=r,c=c)
@@ -73,7 +73,15 @@ for ((r, c, n), output) in zip(args, extreme_outputs):
             sys.stdout.write('.')
             sys.stdout.flush()
 
-    assert k.squeeze(n) == unhexlify(output)
+    sys.stdout.write('\n')
+    received = k.squeeze(n)
+    if unhexlify(expected) != received:
+        print "for Keccak parameters r=%d, c=%d, n=%d" % (r,c,n)
+        print "expected '%s'" % expected
+        print
+        print "got '%s'" % hexlify(received)
+        print
+        sys.exit(1)
 
 print "ALL DONE!"
 sys.exit(0)
