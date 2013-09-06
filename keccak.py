@@ -15,7 +15,7 @@ import math
 from binascii import hexlify
 from intbytes import int2bytes, bytes2int
 
-class KeccakError(Exception):
+class KeccakError(RuntimeError):
     """Class of error used in the Keccak implementation
 
     Use: raise KeccakError("Text to be displayed")"""
@@ -25,7 +25,7 @@ class Keccak(object):
     """
     Class implementing the Keccak sponge function
     """
-    def __init__(self, r=1024,c=576,verbose=False):
+    def __init__(self, r=1024,c=576,duplex=False,verbose=False):
         """Constructor:
 
         r: bitrate (default 1024)
@@ -35,14 +35,15 @@ class Keccak(object):
         see http://keccak.noekeon.org/NoteOnKeccakParametersAndUsage.pdf
         """
 
+        self.duplex = duplex
         self.verbose = verbose
         if (r<0) or (r%8!=0):
-            raise KeccakError('r must be a multiple of 8 in this implementation')
+            raise ValueError('r must be a multiple of 8 in this implementation')
         self.r = r
         self.c = c
         self.b = b = r+c
         if b not in [25, 50, 100, 200, 400, 800, 1600]:
-            raise KeccakError('b value not supported - use 25, 50, 100, 200, 400, 800 or 1600')
+            raise ValueError('b value not supported - use 25, 50, 100, 200, 400, 800 or 1600')
         self.w = w = b//25
         self.l=int(math.log(self.w,2))
         self.nr=12+2*self.l
@@ -140,9 +141,9 @@ class Keccak(object):
 
         #Check that input paramaters
         if w%8!= 0:
-            raise KeccakError("w is not a multiple of 8")
+            raise ValueError("w is not a multiple of 8")
         if len(string)!=b//8:
-            raise KeccakError("string can't be divided in 25 blocks of w bits\
+            raise ValueError("string can't be divided in 25 blocks of w bits\
             i.e. string must have exactly b bits")
 
         #Convert
@@ -163,9 +164,9 @@ class Keccak(object):
 
         #Check input format
         if w%8!= 0:
-            raise KeccakError("w is not a multiple of 8")
+            raise ValueError("w is not a multiple of 8")
         if (len(table)!=5) or (False in [len(row)==5 for row in table]):
-            raise KeccakError("table must be 5x5")
+            raise ValueError("table must be 5x5")
 
         #Convert
         output=[None]*25
@@ -254,12 +255,12 @@ class Keccak(object):
 
         # Check the parameter n
         if n%8!=0:
-            raise KeccakError("n must be a multiple of 8")
+            raise ValueError("n must be a multiple of 8")
 
         if M_bit_len is None:
             M_bit_len = len(M)*8
         elif M_bit_len > len(M)*8:
-            raise KeccakError("the string is too short to contain the number of bits announced")
+            raise ValueError("the string is too short to contain the number of bits announced")
 
         nr_bytes_filled=M_bit_len//8
         nbr_bits_filled=M_bit_len%8
@@ -285,21 +286,43 @@ class Keccak(object):
         return M
 
     def __call__(self, M):
-        """Does the same as soak"""
-        self.soak(M)
+        """If this instance is duplex, permforms the duplex Keccak operations,
+        otherwise does the same as soak
+        """
+        if not self.duplex:
+            return self.soak(M)
+
+        r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
+
+        if len(M) >= r//8:
+            raise ValueError('Argument too long for duplex Keccak with r=%d' % d)
+
+        M = self.pad10star1(M, r)
+
+        if verbose:
+            print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(M), c//8))
+
+        M += '\x00'*(c//8)
+        Mi = self.convertStrToTable(M, w, b)
+        for y in range(5):
+            for x in range(5):
+                self.S[x][y] ^= Mi[x][y]
+        self.S = self.KeccakF(self.S, nr, w, verbose)
+        return self.convertTableToStr(self.S, w)
 
     def soak(self, M):
         """Perform the soaking phase of Keccak: data is mixed into the internal state
         
         M: the string to be soaked
         """
+        if self.done_soaking:
+            raise KeccakError('Cannot continue soaking once squeezing has begun')
+        if self.duplex:
+            raise KeccakError('Duplex Keccak cannot soak or squeeze, call this object instead')
+
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
-        if self.done_soaking:
-            raise RuntimeError('Cannot continue soaking once squeezing has begun')
-
         self.P += M
-
 
         for _ in xrange((len(self.P)*8)//r):
             chunk, self.P = self.P[:(r//8)], self.P[(r//8):]
@@ -332,6 +355,9 @@ class Keccak(object):
         (this method can be called many times to produce as much output as needed)
         """
         w, r, nr, verbose = self.w, self.r, self.nr, self.verbose
+
+        if self.duplex:
+            raise KeccakError('Duplex Keccak cannot soak or squeeze, call this object instead')
 
         # pad the remaining input and add it to the internal state
         if not self.done_soaking:
@@ -392,6 +418,8 @@ class KeccakRandom(random_base):
             self.k.S = keccak_S
             self.k.output_cache = keccak_output_cache
         else:
+            if 'duplex' in keccak_args:
+                raise ValueError('KeccakRandom does not work with duplex Keccak')
             self.k = Keccak(**keccak_args)
             self.keccak_args = keccak_args
             self.k.soak(seed)

@@ -1,4 +1,3 @@
-implement duplex Keccak
 write tests
     damgaardjurik.py
         *key generation
