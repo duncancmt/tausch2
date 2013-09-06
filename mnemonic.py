@@ -79,7 +79,7 @@ def encode(s):
 
     k = Keccak()
     k.soak(s)
-    checksum_length = min(6, max(1, int(ceil(log(len(s), 2)))))
+    checksum_length = max(1, int(ceil(log(len(s), 2))))
     checksum = k.squeeze(checksum_length)
 
     s += checksum
@@ -106,7 +106,10 @@ def decode(w):
     if isinstance(w, bytes):
         w = w.split()
 
-    indexes = map(lambda x: rwords[x], w)
+    try:
+        indexes = map(lambda x: rwords[x], w)
+    except KeyError:
+        raise ValueError('Unrecognized word')
     values = reduce(lambda (last_index, accum), index: (index,
                                                         accum + [(index - last_index) % len(words)]),
                     indexes,
@@ -116,7 +119,7 @@ def decode(w):
 
     (length, consumed) = decode_int(s)
     s = s[:-consumed]
-    checksum_length = min(6, max(1, int(ceil(log(length, 2)))))
+    checksum_length = max(1, int(ceil(log(length, 2))))
     s, checksum = s[:-checksum_length], s[-checksum_length:]
     if len(s) != length:
         raise ValueError("Invalid length")
