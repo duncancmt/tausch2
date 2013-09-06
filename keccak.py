@@ -1,4 +1,3 @@
-#! /usr/bin/python2
 # The Keccak sponge function, designed by Guido Bertoni, Joan Daemen,
 # Michael Peeters and Gilles Van Assche. For more information, feedback or
 # questions, please refer to our website: http://keccak.noekeon.org/
@@ -6,6 +5,7 @@
 # Implementation by Renaud Bauvin,
 # hereby denoted as "the implementer".
 # Heavy modifications to make this more idiomatic by Duncan Townsend.
+# KeccakRandom written by Duncan Townsend.
 #
 # To the extent possible under law, the implementer has waived all copyright
 # and related or neighboring rights to the source code in this file.
@@ -47,8 +47,6 @@ class Keccak(object):
         self.l=int(math.log(self.w,2))
         self.nr=12+2*self.l
 
-        self.done_soaking = False
-
         if verbose:
             print "Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25)
 
@@ -60,6 +58,7 @@ class Keccak(object):
                   [0,0,0,0,0]]
         self.P = ''
         self.output_cache = ''
+        self.done_soaking = False
 
     # Constants
 
@@ -301,11 +300,12 @@ class Keccak(object):
 
         self.P += M
 
-        if verbose:
-            print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(self.P), c//8))
 
         for _ in xrange((len(self.P)*8)//r):
             chunk, self.P = self.P[:(r//8)], self.P[(r//8):]
+            if verbose:
+                print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(chunk), c//8))
+
             chunk += '\x00'*(c//8)
             Pi=self.convertStrToTable(chunk,w,b)
             for y in range(5):
@@ -374,4 +374,72 @@ class Keccak(object):
 
         return retval
 
-__all__ = ['Keccak', 'KeccakError']
+
+try:
+    from correct_random import CorrectRandom as random_base
+except ImportError:
+    import warnings
+    warnings.warn("Not having correct_random.CorrectRandom makes some of KeccakRandom's methods produce biased output")
+    from random import Random as random_base
+class KeccakRandom(random_base):
+    def __init__(self, seed=None, keccak_args=dict(), _state=None):
+        if _state is not None:
+            (keccak_args, keccak_P, keccak_S, keccak_output_cache, self._cache, self._cache_len) = _state
+            self.k = Keccak(**keccak_args)
+            self.keccak_args = keccak_args
+            self.k.done_soaking = True
+            self.k.P = keccak_P
+            self.k.S = keccak_S
+            self.k.output_cache = keccak_output_cache
+        else:
+            self.k = Keccak(**keccak_args)
+            self.keccak_args = keccak_args
+            self.k.soak(seed)
+            self._cache = 0L
+            self._cache_len = 0L
+
+    @classmethod
+    def from_state(cls, state):
+        return cls(seed=None, keccak_args=None, _state=state)
+
+    def getrandbits(self, n):
+        bytes_needed = max(int(math.ceil((1.0*n-self._cache_len) / 8)), 0)
+
+        self._cache |= bytes2int(self.k.squeeze(bytes_needed)) << self._cache_len
+        self._cache_len += bytes_needed * 8
+
+        result = self._cache & ((1<<n) - 1)
+        self._cache >>= n
+        self._cache_len -= n
+        return result
+
+    def seed(self, seed):
+        self.k = Keccak(**self.keccak_args)
+        self.k.soak(seed)
+
+        self._cache = 0L
+        self._cache_len = 0L
+
+    def getstate(self):
+        return (self.keccak_args, self.k.P,
+                self.k.P, self.k.output_cache,
+                self._cache, self._cache_len)
+
+    def setstate(self, state):
+        (self.keccak_args, self.k.P,
+         self.k.P, self.k.output_cache,
+         self._cache, self._cache_len) = state
+
+    def jumpahead(self, n):
+        # clear Keccak cache
+        self.k.squeeze(len(self.k.output_cache))
+
+        # iterate Keccak n times
+        for _ in xrange(n):
+            self.k.squeeze(self.k.r//8)
+
+        # clear our cache
+        self._cache = 0L
+        self._cache_len = 0L
+
+__all__ = ['Keccak', 'KeccakError', 'KeccakRandom']

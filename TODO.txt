@@ -17,11 +17,12 @@ write tests
         deterministic initialization
         timing
     intbytes.py
-        standard vectors
+        standard vectors (empty vectors, zero int)
         random vectors
     keccak.py
         *simplex
         duplex
+        KeccakRandom
     mnemonic.py
         standard vectors
         random vectors
@@ -39,3 +40,4 @@ write tests
 fix timing attacks in Damgaard-Jurik
 see if Damgaard-Jurik should be using safe primes
 implement division in DamgaardJurikCiphertext
+implement permissive decoding in mnemonic.py
