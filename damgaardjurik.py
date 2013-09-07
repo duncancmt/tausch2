@@ -98,18 +98,11 @@ class DamgaardJurik(object):
             the default is python's random
         """
 
-        # format the message as an integer regardless of how it was given
-        if isinstance(message, bytes):
-            i = bytes2int(message)
-            return_type = bytes
-        elif isinstance(message, DamgaardJurikPlaintext):
-            i = int(message)
-            return_type = DamgaardJurikCiphertext
-        elif isinstance(message, (Integral, mpz_type)):
-            i = message
-            return_type = int
-        else:
-            raise ValueError('message must be a bytes, DamgaardJurikPlaintext, or number')
+        if not isinstance(message, DamgaardJurikPlaintext):
+            raise TypeError('Before encryption, convert messages to DamgaardJurikPlaintext instances')
+
+        # format the message as an integer
+        i = int(message)
 
         # check/calculate s
         if s is None:
@@ -124,7 +117,7 @@ class DamgaardJurik(object):
         ns1 = ns*self.n
 
         # generate the random parameter r
-        r = 1 << (self.keylen * (s + 1))
+        r = random.getrandbits(self.keylen * (s + 1))
         while r >= ns1:
             r = random.getrandbits(self.keylen * (s + 1))
 
@@ -133,15 +126,8 @@ class DamgaardJurik(object):
         c *= pow(r, ns, ns1)
         c %= ns1
 
-        # format the ciphertext to match the type of the plaintext
-        if return_type is bytes:
-            return int2bytes(c, int(ceil(log(int(self.n), 2)*(s+1)/8.0)))
-        elif return_type is DamgaardJurikCiphertext:
-            return DamgaardJurikCiphertext(c, ns1)
-        elif return_type is int:
-            return int(c)
-        else:
-            raise RuntimeError('Invalid value for return_type')
+        # format the ciphertext as DamgaardJurikCiphertext
+        return DamgaardJurikCiphertext(c, ns1)
 
     def decrypt(self, message):
         """Decrypt and encrypted message. Only works if this instance has a private key available.
@@ -153,18 +139,11 @@ class DamgaardJurik(object):
         if self.l is None:
             raise RuntimeError('This key has no private material for decryption')
 
+        if not isinstance(message, DamgaardJurikCiphertext):
+            raise TypeError('Data for decryption must be formatted as DamgaardJurikCiphertext instance')
+
         # format the ciphertext as an integer, regardless of the given type
-        if isinstance(message, bytes):
-            c = bytes2int(message)
-            return_type = bytes
-        elif isinstance(message, DamgaardJurikCiphertext):
-            c = int(message)
-            return_type = DamgaardJurikPlaintext
-        elif isinstance(message, (Integral, mpz_type)):
-            c = message
-            return_type = int
-        else:
-            raise ValueError('message must be a bytes, DamgaardJurikCiphertext, or number')
+        c = int(message)
 
         # determine s from the message length
         s = int(ceil(log(c, int(self.n)) - 1))
@@ -201,14 +180,7 @@ class DamgaardJurik(object):
             i = t1
 
         # format the plaintext to match the type of the ciphertext
-        if return_type is bytes:
-            return int2bytes(i, int(floor(self.keylen*s/8.0)))
-        elif return_type is DamgaardJurikPlaintext:
-            return DamgaardJurikPlaintext(i)
-        elif return_type is int:
-            return int(i)
-        else:
-            raise RuntimeError('Invalid value for return_type')
+        return DamgaardJurikPlaintext(i)
 
     @property
     def pubkey(self):
@@ -231,8 +203,18 @@ class DamgaardJurik(object):
 
 class DamgaardJurikPlaintext(long):
     """Class representing the plaintext in Damgaard-Jurik"""
+    def __new__(cls, n):
+        if isinstance(n, bytes):
+            n = bytes2int(n) | (1 << len(n)*8)
+            return cls(n)
+        else:
+            return super(DamgaardJurikPlaintext, cls).__new__(cls, n)
     def __repr__(self):
         return 'DamgaardJurikPlaintext(%s)' % str(self)
+    def __str__(self):
+        retval = int2bytes(self.c)
+        if retval[-1] != '\x01':
+            raise ValueError('Invalid padding for conversion to str')
 class DamgaardJurikCiphertext(Integral):
     """Class representing the ciphertext in Damgaard-Jurik. Also represents the homomorphisms of Damgaard-Jurik"""
     def __init__(self, c, ns1, cache_powers=True):
@@ -257,6 +239,8 @@ class DamgaardJurikCiphertext(Integral):
 
     def __repr__(self):
         return 'DamgaardJurikCiphertext(%s, %s, cache_powers=%s)' % (self.c, self.ns1, self.cache_powers)
+    def __str__(self):
+        return int2bytes(self.c)
 
     def __add__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
@@ -364,10 +348,16 @@ class DamgaardJurikCiphertext(Integral):
         else:
             return self.c >= other
 
-    def __trunc__(self):
+    def __int__(self):
         return int(self.c)
+    def __trunc__(self):
+        return int(self)
     def __long__(self):
-        return long(self.c)
+        return long(int(self))
+    def __float__(self):
+        return float(int(self))
+    def __complex__(self):
+        return complex(int(self))
 
     def __and__(self, other):
         return NotImplemented
