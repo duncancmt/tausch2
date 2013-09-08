@@ -29,7 +29,6 @@ def bytes2int(b):
 
     b: the string (bytes) to be converted
     """
-    assert isinstance(b, bytes)
     return sum(ord(char) << (i * 8) for i, char in enumerate(b))
 
 __all__ = ['int2bytes', 'bytes2int']
