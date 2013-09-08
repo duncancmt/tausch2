@@ -144,4 +144,65 @@ def decode(w, compact=False):
 
     return s
 
-__all__ = ['encode', 'decode']
+def randomart(s, height=9, width=17, length=64, border=True, tag=''):
+    """Produce a easy to compare visual representation of a string.
+    Follows the algorithm laid out here http://www.dirk-loss.de/sshvis/drunken_bishop.pdf
+    with the substitution of Keccak for MD5.
+
+    s: the string to create a representation of
+    height: (optional) the height of the representation to generate, default 9
+    width: (optional) the width of the representation to generate, default 17
+    length: (optional) the length of the random walk, essentially how many
+        points are plotted in the representation, default 64
+    border: (optional) whether to put a border around the representation,
+        default True
+    tag: (optional) a short string to be incorporated into the border,
+        does nothing if border is False, defaults to the empty string
+    """
+    k = Keccak()
+    k.soak(s)
+    # we reverse the endianness so that increasing length produces a radically
+    # different randomart
+    i = bytes2int(reversed(k.squeeze(length / 4)))
+
+    field = [ [0 for _ in xrange(width)]
+              for __ in xrange(height) ]
+    start = (height // 2,
+             width // 2)
+    position = start
+    directions = ((-1, -1),
+                  (-1, 1),
+                  (1, -1),
+                  (1, 1))
+    for j in xrange(length):
+        row_off, col_off = directions[(i>>(j*2)) % 4]
+        position = (min(max(position[0] + row_off, 0),
+                        height - 1),
+                    min(max(position[1] + col_off, 0),
+                        width - 1))
+        field[position[0]][position[1]] += 1
+
+    field[start[0]][start[1]] = 15
+    field[position[0]][position[1]] = 16
+    chars = ' .o+=*BOX@%&#/^SE'
+
+    if border:
+        if len(tag) > width - 2:
+            tag = tag[:width-2]
+        if tag:
+            tag_pad_len = (width - len(tag) - 2) / 2.0
+            first_row = '+' + ('-'*int(floor(tag_pad_len))) \
+                        + '['+tag+']' \
+                        + ('-'*int(ceil(tag_pad_len))) + '+\n'
+        else:
+            first_row = '+' + ('-'*width) + '+\n'
+        last_row = '\n+' + ('-'*width) + '+'
+        return first_row \
+               + '\n'.join('|'+''.join(chars[cell] for cell in row)+'|'
+                           for row in field) \
+               + last_row
+    else:
+        return '\n'.join(''.join(chars[cell] for cell in row)
+                         for row in field)
+
+__all__ = ['encode', 'decode', 'randomart']
