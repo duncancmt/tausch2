@@ -13,6 +13,7 @@
 
 import math
 from binascii import hexlify
+from copy import deepcopy
 from intbytes import int2bytes, bytes2int
 
 class KeccakError(RuntimeError):
@@ -366,8 +367,6 @@ class Keccak(object):
             assert len(self.P) == r // 8
             self.soak('')
             self.done_soaking = True
-            if verbose:
-                print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, w))))
 
         assert self.P == ''
 
@@ -400,6 +399,12 @@ class Keccak(object):
 
         return retval
 
+    def getstate(self):
+        return deepcopy(self.__dict__)
+    def setstate(self, state):
+        for k, v in deepcopy(state).iteritems():
+            setattr(self, k, v)
+
 
 try:
     from correct_random import CorrectRandom as random_base
@@ -408,20 +413,14 @@ except ImportError:
     warnings.warn("Not having correct_random.CorrectRandom makes some of KeccakRandom's methods produce biased output")
     from random import Random as random_base
 class KeccakRandom(random_base):
-    def __init__(self, seed=None, keccak_args=dict(), _state=None):
+    def __init__(self, seed='', keccak_args=dict(), _state=None):
         if _state is not None:
-            (keccak_args, keccak_P, keccak_S, keccak_output_cache, self._cache, self._cache_len) = _state
-            self.k = Keccak(**keccak_args)
-            self.keccak_args = keccak_args
-            self.k.done_soaking = True
-            self.k.P = keccak_P
-            self.k.S = keccak_S
-            self.k.output_cache = keccak_output_cache
+            self.setstate(_state)
         else:
-            if 'duplex' in keccak_args:
+            if 'duplex' in keccak_args and keccak_args['duplex']:
                 raise ValueError('KeccakRandom does not work with duplex Keccak')
-            self.k = Keccak(**keccak_args)
             self.keccak_args = keccak_args
+            self.k = Keccak(**self.keccak_args)
             self.k.soak(seed)
             self._cache = 0L
             self._cache_len = 0L
@@ -449,14 +448,13 @@ class KeccakRandom(random_base):
         self._cache_len = 0L
 
     def getstate(self):
-        return (self.keccak_args, self.k.P,
-                self.k.P, self.k.output_cache,
-                self._cache, self._cache_len)
+        return deepcopy((self.keccak_args, self.k.getstate(),
+                         self._cache, self._cache_len))
 
     def setstate(self, state):
-        (self.keccak_args, self.k.P,
-         self.k.P, self.k.output_cache,
-         self._cache, self._cache_len) = state
+        (self.keccak_args, keccak_state, self._cache, self._cache_len) = deepcopy(state)
+        self.k = Keccak(**self.keccak_args)
+        self.k.setstate(keccak_state)
 
     def jumpahead(self, n):
         # clear Keccak cache
