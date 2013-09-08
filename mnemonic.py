@@ -66,8 +66,11 @@ def decode_int(s):
         s = s[-total_length:-(consumed_length+1)]
         return (bytes2int(s), total_length)
 
-def encode(s):
+def encode(s, compact=False):
     """From a byte string, produce a list of words that durably encodes the string.
+
+    s: the byte string to be encoded
+    compact: instead of using the length encoding scheme, pad by prepending a 1 bit
 
     The words in the encoding dictionary were chosen to be common and unambiguous.
     The encoding also includes a checksum. The encoding is constructed so that
@@ -75,12 +78,13 @@ def encode(s):
     """
     if not isinstance(s, bytes):
         raise TypeError("mnemonic.encode can only encode byte strings")
-    length = encode_int(len(s))
 
     k = Keccak()
     k.soak(s)
     checksum_length = max(1, int(ceil(log(len(s), 2))))
     checksum = k.squeeze(checksum_length)
+
+    length = chr(checksum_length) if compact else encode_int(len(s))
 
     s += checksum
     s += length
@@ -97,9 +101,12 @@ def encode(s):
     assert i == 0
     return retval
 
-def decode(w):
+def decode(w, compact=False):
     """From a list of words, or a whitespace-separated string of words, produce
     the original string that was encoded.
+
+    w: the list of words, or whitespace delimited words to be decoded
+    compact: compact encoding was used instead of length encoding
 
     Raises ValueError if the encoding is invalid.
     """
@@ -117,9 +124,15 @@ def decode(w):
     i = sum(mantissa * len(words)**radix for radix, mantissa in enumerate(values))
     s = int2bytes(i)
 
-    (length, consumed) = decode_int(s)
+    if compact:
+        checksum_length = ord(s[-1])
+        consumed = 1
+        length = len(s) - checksum_length - consumed
+    else:
+        (length, consumed) = decode_int(s)
+        checksum_length = max(1, int(ceil(log(length, 2))))
+
     s = s[:-consumed]
-    checksum_length = max(1, int(ceil(log(length, 2))))
     s, checksum = s[:-checksum_length], s[-checksum_length:]
     if len(s) != length:
         raise ValueError("Invalid length")
