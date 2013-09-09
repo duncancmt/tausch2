@@ -163,7 +163,7 @@ def randomart(s, height=9, width=17, length=64, border=True, tag=''):
     k.soak(s)
     # we reverse the endianness so that increasing length produces a radically
     # different randomart
-    i = bytes2int(reversed(k.squeeze(length / 4)))
+    i = bytes2int(reversed(k.squeeze(int(ceil(length / 4.0)))))
 
     field = [ [0 for _ in xrange(width)]
               for __ in xrange(height) ]
