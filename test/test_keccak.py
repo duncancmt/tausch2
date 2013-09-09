@@ -123,7 +123,7 @@ class KeccakRandomTestCase(unittest.TestCase):
                          self.random().getrandbits(self.bits),
                          'seed: %s\noutput from identical instances should be identical' % repr(self.seed))
     def test_seed(self):
-        random = keccak.KeccakRandom()
+        random = keccak.KeccakRandom('\x00')
         random.seed(self.seed)
         self.assertEqual(self.random().getrandbits(self.bits),
                          random.getrandbits(self.bits),
