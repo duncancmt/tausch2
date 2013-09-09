@@ -414,17 +414,14 @@ except ImportError:
     warnings.warn("Not having correct_random.CorrectRandom makes some of KeccakRandom's methods produce biased output")
     from random import Random as random_base
 class KeccakRandom(random_base):
-    def __init__(self, seed='', keccak_args=dict(), _state=None):
+    def __init__(self, seed=None, keccak_args=dict(), _state=None):
         if _state is not None:
             self.setstate(_state)
         else:
             if 'duplex' in keccak_args and keccak_args['duplex']:
                 raise ValueError('KeccakRandom does not work with duplex Keccak')
             self.keccak_args = keccak_args
-            self.k = Keccak(**self.keccak_args)
-            self.k.soak(seed)
-            self._cache = 0L
-            self._cache_len = 0L
+            self.seed(seed)
 
     @classmethod
     def from_state(cls, state):
@@ -443,6 +440,13 @@ class KeccakRandom(random_base):
 
     def seed(self, seed):
         self.k = Keccak(**self.keccak_args)
+
+        if seed is None:
+            seed = ''
+            with open('/dev/random','rb') as randfile:
+                print 'reading %d bytes from /dev/random' % int(math.ceil(self.k.c / 8.0))
+                for _ in xrange(int(math.ceil(self.k.c / 8.0))):
+                    seed += randfile.read(1)
         self.k.soak(seed)
 
         self._cache = 0L
