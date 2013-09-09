@@ -212,9 +212,10 @@ class DamgaardJurikPlaintext(long):
     def __repr__(self):
         return 'DamgaardJurikPlaintext(%s)' % str(self)
     def __str__(self):
-        retval = int2bytes(self.c)
+        retval = int2bytes(self)
         if retval[-1] != '\x01':
             raise ValueError('Invalid padding for conversion to str')
+        return retval[:-1]
 class DamgaardJurikCiphertext(Integral):
     """Class representing the ciphertext in Damgaard-Jurik. Also represents the homomorphisms of Damgaard-Jurik"""
     def __init__(self, c, ns1, cache_powers=True):
@@ -229,16 +230,10 @@ class DamgaardJurikCiphertext(Integral):
         self.c = c
         self.ns1 = ns1
         self.cache_powers = cache_powers
-        if cache_powers:
-            self.cache = [None]*int(ceil(log(int(ns1), 2)))
-            self.cache[0] = c
-            for i in xrange(1, len(self.cache)):
-                self.cache[i] = self.cache[i-1]**2
-        else:
-            self.cache = None
+        self.cache = None
 
     def __repr__(self):
-        return 'DamgaardJurikCiphertext(%s, %s, cache_powers=%s)' % (self.c, self.ns1, self.cache_powers)
+        return 'DamgaardJurikCiphertext(%d, %d, cache_powers=%s)' % (self.c, self.ns1, self.cache_powers)
     def __str__(self):
         return int2bytes(self.c)
 
@@ -275,6 +270,12 @@ class DamgaardJurikCiphertext(Integral):
             other = other.c
         other %= self.ns1
         if self.cache_powers:
+            if self.cache is None:
+                self.cache = [None]*int(ceil(log(int(self.ns1), 2)))
+                self.cache[0] = self.c
+                for i in xrange(1, len(self.cache)):
+                    self.cache[i] = self.cache[i-1]**2
+
             retval = 1
             garbage = 1
             for i, b in enumerate(reversed(bin(other)[2:])):
