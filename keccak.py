@@ -309,7 +309,7 @@ class Keccak(object):
             for x in range(5):
                 self.S[x][y] ^= Mi[x][y]
         self.S = self.KeccakF(self.S, nr, w, verbose)
-        return self.convertTableToStr(self.S, w)
+        return self.convertTableToStr(self.S, w)[:r//8]
 
     def soak(self, M):
         """Perform the soaking phase of Keccak: data is mixed into the internal state
