@@ -371,6 +371,7 @@ class Keccak(object):
         assert self.P == ''
 
         # if there is any leftover output from a previous squeezing, return it
+        assert len(self.output_cache) < r//8
         retval = ''
         outputLength = n
         if outputLength <= len(self.output_cache):
@@ -382,17 +383,17 @@ class Keccak(object):
         
         # perform the squeezing operation up to within a block boundary of the output
         while outputLength>=r//8:
-            string=self.convertTableToStr(self.S, w)
-            retval += string[:r//8]
-            outputLength -= r//8
+            retval += self.convertTableToStr(self.S, w)[:r//8]
             self.S = self.KeccakF(self.S, nr, w, verbose)
+            outputLength -= r//8
 
         # fill the rest of the output and save the leftovers, if any
         if outputLength > 0:
-            string=self.convertTableToStr(self.S, w)
+            string = self.convertTableToStr(self.S, w)[:r//8]
             self.S = self.KeccakF(self.S, nr, w, verbose)
             temp, self.output_cache = string[:outputLength], string[outputLength:]
             retval += temp
+        assert len(self.output_cache) < r//8
             
         if verbose:
             print("Value after squeezing : %s" % (hexlify(self.convertTableToStr(self.S, w))))
@@ -430,7 +431,7 @@ class KeccakRandom(random_base):
         return cls(seed=None, keccak_args=None, _state=state)
 
     def getrandbits(self, n):
-        bytes_needed = max(int(math.ceil((1.0*n-self._cache_len) / 8)), 0)
+        bytes_needed = max(int(math.ceil((n-self._cache_len) / 8.0)), 0)
 
         self._cache |= bytes2int(self.k.squeeze(bytes_needed)) << self._cache_len
         self._cache_len += bytes_needed * 8
