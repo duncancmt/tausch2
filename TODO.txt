@@ -21,7 +21,7 @@ write tests
     keccak.py
         *simplex
         duplex
-        KeccakRandom
+        *KeccakRandom
     mnemonic.py
         standard vectors
         random vectors
