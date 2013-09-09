@@ -83,11 +83,10 @@ class LongKeccakTestCase(KeccakTestCase):
     def runTest(self):
         for _ in xrange(self.repeats):
             self.k.soak(self.input_vector)
-        self.assertEqual(self.k.squeeze(self.keccak_args['n']), self.output_vector,
-                         'input: %s\nparameters r=%d, c=%d, n=%d' % (repr(hexlify(self.input_vector)),
-                                                                     self.keccak_args['r'],
-                                                                     self.keccak_args['c'],
-                                                                     self.keccak_args['n']))
+        self.assertEqual(self.k.squeeze(self.keccak_args['n']), unhexlify(self.output_vector),
+                         'parameters r=%d, c=%d, n=%d' % (self.keccak_args['r'],
+                                                          self.keccak_args['c'],
+                                                          self.keccak_args['n']))
 
 class LongKeccakTestSuite(unittest.TestSuite):
     pass
