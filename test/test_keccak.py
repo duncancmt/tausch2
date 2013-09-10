@@ -1,6 +1,7 @@
 import os.path
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+this_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(this_dir))
 
 import cPickle
 import unittest
@@ -42,7 +43,7 @@ args = ({'r':  40, 'c':160, 'n': 20},
         {'r': 544, 'c':256, 'n': 68},
         {'r':1344, 'c':256, 'n':512})
 
-p = cPickle.Unpickler(open('nonstandard_vectors.pkl','rb'))
+p = cPickle.Unpickler(open(os.path.join(this_dir, 'nonstandard_vectors.pkl'),'rb'))
 vectors = p.load()
 
 ns_tests = NonstandardKeccakTestSuite(KeccakTestCase(keccak_args, input_vector, output_vector)
@@ -63,7 +64,7 @@ args = ({'r':1024, 'c': 576, 'n':512}, # Keccak[]
         {'r': 832, 'c': 768, 'n': 48}, # SHA3-384
         {'r': 576, 'c':1024, 'n': 64}) # SHA3-512
 
-p = cPickle.Unpickler(open('vectors.pkl','rb'))
+p = cPickle.Unpickler(open(os.path.join(this_dir, 'vectors.pkl'),'rb'))
 vectors = p.load()
 
 s_tests = StandardKeccakTestSuite(KeccakTestCase(keccak_args, input_vector, output_vector)
