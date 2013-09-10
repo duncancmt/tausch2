@@ -31,7 +31,7 @@ def encode_int(i):
     elif i <= 0xffffffffffffffff:
         return int2bytes(i,8) + chr(0xfe)
     else:
-        l = int(floor(log(i, 0x100) + 1))
+        l = (i.bit_length() - 1) // 8 + 1
         s = int2bytes(i,l)
         assert len(s) == l
         return s + encode_int(l) + chr(0xff)
@@ -81,7 +81,7 @@ def encode(s, compact=False):
 
     k = Keccak()
     k.soak(s)
-    checksum_length = max(1, int(ceil(log(len(s), 2))))
+    checksum_length = max(1, (len(s)-1).bit_length())
     checksum = k.squeeze(checksum_length)
 
     length = chr(checksum_length) if compact else encode_int(len(s))
@@ -130,7 +130,7 @@ def decode(w, compact=False):
         length = len(s) - checksum_length - consumed
     else:
         (length, consumed) = decode_int(s)
-        checksum_length = max(1, int(ceil(log(length, 2))))
+        checksum_length = max(1, (len(s)-1).bit_length())
 
     s = s[:-consumed]
     s, checksum = s[:-checksum_length], s[-checksum_length:]

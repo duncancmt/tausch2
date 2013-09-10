@@ -1,10 +1,39 @@
 from __future__ import division
 from random import Random, BPF
 from math import ceil as _ceil, log as _log
+from types import MethodType as _MethodType, BuiltinMethodType as _BuiltinMethodType
+from warnings import warn as _warn
 
 class CorrectRandom(Random):
     def random(self):
         return float(self.getrandbits(BPF)) / 2**BPF
+
+    def _randbelow(self, n, int=int, _maxwidth=1L<<BPF,
+                   _Method=_MethodType, _BuiltinMethod=_BuiltinMethodType):
+        """Return a random int in the range [0,n)
+
+        Handles the case where n has more bits than returned
+        by a single call to the underlying generator.
+        """
+
+        try:
+            getrandbits = self.getrandbits
+        except AttributeError:
+            pass
+        else:
+            # Only call self.getrandbits if the original random() builtin method
+            # has not been overridden or if a new getrandbits() was supplied.
+            # This assures that the two methods correspond.
+            if type(self.random) is _BuiltinMethod or type(getrandbits) is _Method:
+                k = (n-1).bit_length()   # 2**k > n-1 > 2**(k-2)
+                r = getrandbits(k)
+                while r >= n:
+                    r = getrandbits(k)
+                return r
+        if n >= _maxwidth:
+            _warn("Underlying random() generator does not supply \n"
+                "enough bits to choose from a population range this large")
+        return int(self.random() * n)
 
     def choice(self, seq):
         """Choose a random element from a non-empty sequence."""

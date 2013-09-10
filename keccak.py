@@ -11,7 +11,7 @@
 # and related or neighboring rights to the source code in this file.
 # http://creativecommons.org/publicdomain/zero/1.0/
 
-import math
+from math import ceil
 from binascii import hexlify
 from copy import deepcopy
 from intbytes import int2bytes, bytes2int
@@ -45,8 +45,8 @@ class Keccak(object):
         self.b = b = r+c
         if b not in [25, 50, 100, 200, 400, 800, 1600]:
             raise ValueError('b value not supported - use 25, 50, 100, 200, 400, 800 or 1600')
-        self.w = w = b//25
-        self.l=int(math.log(self.w,2))
+        self.w = b//25
+        self.l=(self.w-1).bit_length()
         self.nr=12+2*self.l
 
         if verbose:
@@ -428,7 +428,7 @@ class KeccakRandom(random_base):
         return cls(seed=None, keccak_args=None, _state=state)
 
     def getrandbits(self, n):
-        bytes_needed = max(int(math.ceil((n-self._cache_len) / 8.0)), 0)
+        bytes_needed = max(int(ceil((n-self._cache_len) / 8.0)), 0)
 
         self._cache |= bytes2int(self.k.squeeze(bytes_needed)) << self._cache_len
         self._cache_len += bytes_needed * 8
@@ -444,8 +444,8 @@ class KeccakRandom(random_base):
         if seed is None:
             seed = ''
             with open('/dev/random','rb') as randfile:
-                print 'reading %d bytes from /dev/random' % int(math.ceil(self.k.c / 8.0))
-                for _ in xrange(int(math.ceil(self.k.c / 8.0))):
+                print 'reading %d bytes from /dev/random' % int(ceil(self.k.c / 8.0))
+                for _ in xrange(int(ceil(self.k.c / 8.0))):
                     seed += randfile.read(1)
         self.k.soak(seed)
 
