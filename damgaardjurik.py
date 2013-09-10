@@ -62,7 +62,7 @@ class DamgaardJurik(object):
         if _state is not None:
             # initialize self from given state
             (self.n, self.l) = _state
-            self.keylen = int(ceil(log(self.n,2)))
+            self.keylen = self.n.bit_length()
             if has_gmpy:
                 self.n = mpz(self.n)
                 if self.l is not None:
@@ -117,9 +117,7 @@ class DamgaardJurik(object):
         ns1 = ns*self.n
 
         # generate the random parameter r
-        r = random.getrandbits(self.keylen * (s + 1))
-        while r >= ns1:
-            r = random.getrandbits(self.keylen * (s + 1))
+        r = random.randint(0, ns1-1)
 
         # perform the encryption
         c = pow((1+self.n), i, ns1)
@@ -271,7 +269,7 @@ class DamgaardJurikCiphertext(Integral):
         other %= self.ns1
         if self.cache_powers:
             if self.cache is None:
-                self.cache = [None]*int(ceil(log(int(self.ns1), 2)))
+                self.cache = [None]*self.ns1.bit_length()
                 self.cache[0] = self.c
                 for i in xrange(1, len(self.cache)):
                     self.cache[i] = self.cache[i-1]**2
