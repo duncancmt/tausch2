@@ -23,8 +23,15 @@ class KeccakError(RuntimeError):
 
 try:
     import _sha3
-    has_fast = True
-except ImportError:
+    if _sha3._varout_state_patched:
+        has_fast = True
+    else:
+        raise KeccakError
+except (ImportError, AttributeError, KeccakError):
+    try:
+        del _sha3
+    except NameError:
+        pass
     import warnings
     warnings.warn('Having the _sha3 module from pysha3 makes this module much faster')
     has_fast = False
@@ -59,19 +66,19 @@ class Keccak(object):
         self.l=(self.w-1).bit_length()
         self.nr=12+2*self.l
 
-        if has_fast and fixed_out and self.b == 1600 and self.c == 448:
+        if has_fast and fixed_out and b == 1600 and c == 448:
             self.fast = True
             self.fast_impl = _sha3.sha3_224()
-        elif has_fast and fixed_out and self.b == 1600 and self.c == 512:
+        elif has_fast and fixed_out and b == 1600 and c == 512:
             self.fast = True
             self.fast_impl = _sha3.sha3_256()
-        elif has_fast and fixed_out and self.b == 1600 and self.c == 768:
+        elif has_fast and fixed_out and b == 1600 and c == 768:
             self.fast = True
             self.fast_impl = _sha3.sha3_384()
-        elif has_fast and fixed_out and self.b == 1600 and self.c == 1024:
+        elif has_fast and fixed_out and b == 1600 and c == 1024:
             self.fast = True
             self.fast_impl = _sha3.sha3_512()
-        elif has_fast and not fixed_out and self.b == 1600 and self.c == 576:
+        elif has_fast and not fixed_out and b == 1600 and c == 576:
             self.fast = True
             self.fast_impl = _sha3.sha3_0()
         else:
