@@ -21,12 +21,19 @@ class KeccakError(RuntimeError):
 
     Use: raise KeccakError("Text to be displayed")"""
 
+try:
+    import _sha3
+    has_fast = True
+except ImportError:
+    import warnings
+    warnings.warn('Having the _sha3 module from pysha3 makes this module much faster')
+    has_fast = False
 
 class Keccak(object):
     """
     Class implementing the Keccak sponge function
     """
-    def __init__(self, r=1024,c=576,duplex=False,verbose=False):
+    def __init__(self, r=1024,c=576,fixed_out=False,duplex=False,verbose=False):
         """Constructor:
 
         r: bitrate (default 1024)
@@ -36,6 +43,9 @@ class Keccak(object):
         see http://keccak.noekeon.org/NoteOnKeccakParametersAndUsage.pdf
         """
 
+        if fixed_out and duplex:
+            raise ValueError('It is nonsense to try to instantiate a fixed output, duplex Keccak')
+        self.fixed_out = fixed_out
         self.duplex = duplex
         self.verbose = verbose
         if (r<0) or (r%8!=0):
@@ -49,18 +59,36 @@ class Keccak(object):
         self.l=(self.w-1).bit_length()
         self.nr=12+2*self.l
 
-        if verbose:
-            print "Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25)
+        if has_fast and fixed_out and self.b == 1600 and self.c == 448:
+            self.fast = True
+            self.fast_impl = _sha3.sha3_224()
+        elif has_fast and fixed_out and self.b == 1600 and self.c == 512:
+            self.fast = True
+            self.fast_impl = _sha3.sha3_256()
+        elif has_fast and fixed_out and self.b == 1600 and self.c == 768:
+            self.fast = True
+            self.fast_impl = _sha3.sha3_384()
+        elif has_fast and fixed_out and self.b == 1600 and self.c == 1024:
+            self.fast = True
+            self.fast_impl = _sha3.sha3_512()
+        elif has_fast and not fixed_out and self.b == 1600 and self.c == 576:
+            self.fast = True
+            self.fast_impl = _sha3.sha3_0()
+        else:
+            self.fast = False
 
-        # Initialisation of state
-        self.S = [[0,0,0,0,0],
-                  [0,0,0,0,0],
-                  [0,0,0,0,0],
-                  [0,0,0,0,0],
-                  [0,0,0,0,0]]
-        self.P = ''
-        self.output_cache = ''
-        self.done_soaking = False
+            if verbose:
+                print "Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25)
+
+            # Initialisation of state
+            self.S = ((0,0,0,0,0),
+                      (0,0,0,0,0),
+                      (0,0,0,0,0),
+                      (0,0,0,0,0),
+                      (0,0,0,0,0))
+            self.P = ''
+            self.output_cache = ''
+            self.done_soaking = False
 
     # Constants
 
@@ -157,7 +185,7 @@ class Keccak(object):
             for y in xrange(5):
                 offset=((5*y+x)*w)//8
                 output[x][y]=cls.fromStringToLane(string[offset:offset+(w//8)])
-        return output
+        return tuple(map(tuple,output))
 
     @classmethod
     def convertTableToStr(cls, table, w):
@@ -186,6 +214,7 @@ class Keccak(object):
         """
 
         #Initialisation of temporary variables
+        A = map(list, A)
         B=[[0,0,0,0,0],
            [0,0,0,0,0],
            [0,0,0,0,0],
@@ -218,7 +247,7 @@ class Keccak(object):
         #Iota step
         A[0][0] = A[0][0]^RCfixed
 
-        return A
+        return tuple(map(tuple,A))
 
     @classmethod
     def KeccakF(cls, A, nr, w, verbose):
@@ -293,33 +322,28 @@ class Keccak(object):
         if not self.duplex:
             return self.soak(M)
 
+        if self.fast:
+            raise NotImplementedError
+        
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
         if len(M) >= r//8:
             raise ValueError('Argument too long for duplex Keccak with r=%d' % d)
 
-        M = self.pad10star1(M, r)
+        self.soak(M, _ignore_duplex=True)
+        return self.squeeze(r//8, _ignore_duplex=True)
 
-        if verbose:
-            print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(M), c//8))
-
-        M += '\x00'*(c//8)
-        Mi = self.convertStrToTable(M, w, b)
-        for y in range(5):
-            for x in range(5):
-                self.S[x][y] ^= Mi[x][y]
-        self.S = self.KeccakF(self.S, nr, w, verbose)
-        return self.convertTableToStr(self.S, w)[:r//8]
-
-    def soak(self, M):
+    def soak(self, M, _ignore_duplex=False):
         """Perform the soaking phase of Keccak: data is mixed into the internal state
         
         M: the string to be soaked
         """
-        if self.done_soaking:
-            raise KeccakError('Cannot continue soaking once squeezing has begun')
-        if self.duplex:
+        if self.duplex and not _ignore_duplex:
             raise KeccakError('Duplex Keccak cannot soak or squeeze, call this object instead')
+        if self.fast:
+            return self.fast_impl.update(M)
+        if self.done_soaking and not _ignore_duplex:
+            raise KeccakError('Cannot continue soaking once squeezing has begun')
 
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
@@ -332,9 +356,10 @@ class Keccak(object):
 
             chunk += '\x00'*(c//8)
             Pi=self.convertStrToTable(chunk,w,b)
-            for y in range(5):
-              for x in range(5):
-                  self.S[x][y] ^= Pi[x][y]
+            self.S = ( ( x ^ y
+                         for x, y in zip(srow, prow) )
+                       for srow, prow in zip(self.S, Pi) )
+            self.S = tuple(map(tuple, self.S))
             self.S = self.KeccakF(self.S, nr, w, verbose)
 
             if verbose:
@@ -349,7 +374,7 @@ class Keccak(object):
         """Convenience function that returns the hexadecimal version of the digest"""
         return hexlify(self.squeeze(n))
 
-    def squeeze(self, n):
+    def squeeze(self, n, _ignore_duplex=False):
         """Perform the squeezing phase of Keccak: arbitrary-length digest output is produced from the internal state
 
         n: the length (in bytes) of the output to produce
@@ -357,8 +382,17 @@ class Keccak(object):
         """
         w, r, nr, verbose = self.w, self.r, self.nr, self.verbose
 
-        if self.duplex:
+        if self.duplex and not _ignore_duplex:
             raise KeccakError('Duplex Keccak cannot soak or squeeze, call this object instead')
+
+        if self.fast:
+            if self.fixed_out:
+                tmp = self.fast_impl.copy() # TODO use copy.deepcopy
+                retval = self.fast_impl.squeeze(n)
+                self.fast_impl = tmp
+                return retval
+            else:
+                return self.fast_impl.squeeze(n)
 
         # pad the remaining input and add it to the internal state
         if not self.done_soaking:
@@ -369,6 +403,9 @@ class Keccak(object):
             self.done_soaking = True
 
         assert self.P == ''
+
+        if self.fixed_out:
+            old_S = self.S
 
         # if there is any leftover output from a previous squeezing, return it
         assert len(self.output_cache) < r//8
@@ -397,6 +434,10 @@ class Keccak(object):
             
         if verbose:
             print("Value after squeezing : %s" % (hexlify(self.convertTableToStr(self.S, w))))
+
+        if self.fixed_out:
+            self.S = old_S
+            self.output_cache = ''
 
         return retval
 
