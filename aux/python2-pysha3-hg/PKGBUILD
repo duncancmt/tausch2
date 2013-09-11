@@ -14,7 +14,7 @@ options=(!emptydirs debug !strip)
 source=('hg+https://bitbucket.org/tiran/pykeccak'
         'varout-state.patch')
 sha256sums=('SKIP'
-            'fd6636662f32389be92ca34357b6f2b646dee82f404606cef110360b6cab69c2')
+            '4428a01d9c102ffa12c871ec2276c5acf87ff5d5a52bce5cde1f4cb9d7463e60')
 _hgrepo='pykeccak'
 
 pkgver() {

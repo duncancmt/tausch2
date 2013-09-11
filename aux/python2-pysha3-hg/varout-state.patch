@@ -1,5 +1,5 @@
 --- a/Modules/_sha3/sha3module.c	Wed Jul 31 13:33:01 2013 +0200
-+++ b/Modules/_sha3/sha3module.c	Tue Sep 10 23:45:45 2013 -0400
++++ b/Modules/_sha3/sha3module.c	Wed Sep 11 12:44:37 2013 -0400
 @@ -267,15 +267,17 @@
      SHA3_state temp;
      HashReturn res;
@@ -69,36 +69,48 @@
      if (res != SUCCESS) {
          PyErr_SetString(PyExc_RuntimeError, "internal error in SHA3 Squeeze()");
          PyMem_Free(digest);
-@@ -576,12 +586,42 @@
+@@ -576,12 +586,54 @@
  #endif
  }
  
 +static PyObject *
 +SHA3_get_state(SHA3object *self, void *closure)
 +{
-+    return PyBytes_FromStringAndSize((const char *)&self->hash_state,
++    SHA3_state temp;
++    ENTER_HASHLIB(self);
++    SHA3_copystate(temp, self->hash_state);
++    LEAVE_HASHLIB(self);
++
++    return PyBytes_FromStringAndSize((const char *)&temp,
 +                                     sizeof(SHA3_state));
 +}
 +
 +static int
 +SHA3_set_state(SHA3object *self, PyObject *value, void *closure)
 +{
++    SHA3_state temp;
++
 +    if (value == NULL) {
 +        PyErr_SetString(PyExc_AttributeError, "Attribute 'state' cannot be deleted");
 +        return -1;
 +    }
-+
 +    if (! PyBytes_CheckExact(value)) {
 +        PyErr_SetString(PyExc_TypeError, "Attribute 'state' must be a bytes");
 +        return -1;
 +    }
-+
 +    if (PyBytes_Size(value) != sizeof(SHA3_state)) {
 +        PyErr_Format(PyExc_ValueError, "Attribute 'state' must be a bytes of length %d", sizeof(SHA3_state));
 +        return -1;
 +    }
 +
-+    memcpy(&self->hash_state, PyBytes_AsString(value), sizeof(SHA3_state));
++    /* retain GIL and copy into temporary storage */
++    SHA3_copystate(temp, *PyBytes_AsString(value));
++
++    /* potentially release GIL and copy into object state */
++    ENTER_HASHLIB(self);
++    SHA3_copystate(self->hash_state, temp);
++    LEAVE_HASHLIB(self);
++
 +    return 0;
 +}
 +
@@ -112,3 +124,12 @@
      {NULL}  /* Sentinel */
  };
  
+@@ -800,6 +852,8 @@
+ 
+     PyModule_AddIntConstant(m, "_keccakopt", KeccakOpt);
+     PyModule_AddIntConstant(m, "_hmac_support", SHA3_HMAC_SUPPORT);
++    Py_INCREF(Py_True);
++    PyModule_AddObject(m, "_varout_state_patched", Py_True);
+ 
+ #if PY_MAJOR_VERSION >= 3
+     return m;
