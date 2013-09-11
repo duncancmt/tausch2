@@ -12,9 +12,9 @@ provides=('python2-sha3' 'python2-sha3-git')
 conflicts=('python2-sha3' 'python2-sha3-git')
 options=(!emptydirs debug !strip)
 source=('hg+https://bitbucket.org/tiran/pykeccak'
-        'variable-length-output.patch')
+        'varout-state.patch')
 sha256sums=('SKIP'
-            '69549b1838d99e5f158185b10ce703109a81bed5775d5aec0448ca61f1f2b67a')
+            'fd6636662f32389be92ca34357b6f2b646dee82f404606cef110360b6cab69c2')
 _hgrepo='pykeccak'
 
 pkgver() {
