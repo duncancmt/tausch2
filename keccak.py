@@ -13,7 +13,7 @@
 
 from math import ceil
 from binascii import hexlify
-from copy import deepcopy
+from copy import copy, deepcopy
 from intbytes import int2bytes, bytes2int
 
 class KeccakError(RuntimeError):
@@ -442,9 +442,31 @@ class Keccak(object):
         return retval
 
     def getstate(self):
-        return deepcopy(self.__dict__)
+        retval = copy(self.__dict__)
+        if retval['fast']:
+            retval['fast_impl'] = retval['fast_impl'].state
+        return deepcopy(retval)
     def setstate(self, state):
-        for k, v in deepcopy(state).iteritems():
+        state = deepcopy(state)
+        if state['fast']:
+            fast_state = state['fast_impl']
+            del state['fast_impl']
+            c = state['c']
+            if c == 448:
+                state['fast_impl'] = _sha3.sha3_224()
+            elif c == 512:
+                state['fast_impl'] = _sha3.sha3_256()
+            elif c == 768:
+                state['fast_impl'] = _sha3.sha3_384()
+            elif c == 1024:
+                state['fast_impl'] = _sha3.sha3_512()
+            elif c == 576:
+                state['fast_impl'] = _sha3.sha3_0()
+            else:
+                raise TypeError('Malformed state')
+            state['fast_impl'].state = fast_state
+
+        for k, v in state.iteritems():
             setattr(self, k, v)
 
 
@@ -461,7 +483,10 @@ class KeccakRandom(random_base):
         else:
             if 'duplex' in keccak_args and keccak_args['duplex']:
                 raise ValueError('KeccakRandom does not work with duplex Keccak')
-            self.keccak_args = keccak_args
+            if 'fixed_out' in keccak_args and keccak_args['fixed_out']:
+                raise ValueError('KeccakRandom does not work with fixed output Keccak')
+            keccak_args['fixed_out'] = False
+            self.keccak_args = deepcopy(keccak_args)
             self.seed(seed)
 
     @classmethod
@@ -503,9 +528,6 @@ class KeccakRandom(random_base):
         self.k.setstate(keccak_state)
 
     def jumpahead(self, n):
-        # clear Keccak cache
-        self.k.squeeze(len(self.k.output_cache))
-
         # iterate Keccak n times
         for _ in xrange(n):
             self.k.squeeze(self.k.r//8)
