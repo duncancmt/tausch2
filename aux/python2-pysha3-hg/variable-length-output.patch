@@ -1,0 +1,101 @@
+--- a/Modules/_sha3/sha3module.c	Wed Jul 31 13:33:01 2013 +0200
++++ b/Modules/_sha3/sha3module.c	Tue Sep 10 18:52:29 2013 -0400
+@@ -267,15 +267,27 @@
+     SHA3_state temp;
+     HashReturn res;
+ 
+-    ENTER_HASHLIB(self);
+-    SHA3_copystate(temp, self->hash_state);
+-    LEAVE_HASHLIB(self);
+     if (self->hashbitlen) {
++        ENTER_HASHLIB(self);
++        SHA3_copystate(temp, self->hash_state);
++        LEAVE_HASHLIB(self);
+         res = SHA3_done(&temp, digest);
++        SHA3_clearstate(temp);
+     } else {
+-       res = SHA3_squeeze(&temp, digest, self->digestlen * 8);
++#ifdef WITH_THREAD
++        if(self->lock){
++            Py_BEGIN_ALLOW_THREADS
++            PyThread_acquire_lock(self->lock, 1);
++            res = SHA3_squeeze(&self->hash_state, digest, self->digestlen * 8);
++            PyThread_release_lock(self->lock);
++            Py_END_ALLOW_THREADS
++        } else {
++            res = SHA3_squeeze(&self->hash_state, digest, self->digestlen * 8);
++        }
++#else
++        res = SHA3_squeeze(&self->hash_state, digest, self->digestlen * 8);
++#endif
+     }
+-    SHA3_clearstate(temp);
+     if (res != SUCCESS) {
+         PyErr_SetString(PyExc_RuntimeError, "internal error in SHA3 Final()");
+         return NULL;
+@@ -362,15 +374,27 @@
+     HashReturn res;
+ 
+     /* Get the raw (binary) digest value */
+-    ENTER_HASHLIB(self);
+-    SHA3_copystate(temp, self->hash_state);
+-    LEAVE_HASHLIB(self);
+     if (self->hashbitlen) {
++        ENTER_HASHLIB(self);
++        SHA3_copystate(temp, self->hash_state);
++        LEAVE_HASHLIB(self);
+         res = SHA3_done(&temp, digest);
++        SHA3_clearstate(temp);
+     } else {
+-       res = SHA3_squeeze(&temp, digest, self->digestlen * 8);
++#ifdef WITH_THREAD
++        if(self->lock){
++            Py_BEGIN_ALLOW_THREADS
++            PyThread_acquire_lock(self->lock, 1);
++            res = SHA3_squeeze(&self->hash_state, digest, self->digestlen * 8);
++            PyThread_release_lock(self->lock);
++            Py_END_ALLOW_THREADS
++        } else {
++            res = SHA3_squeeze(&self->hash_state, digest, self->digestlen * 8);
++        }
++#else
++        res = SHA3_squeeze(&self->hash_state, digest, self->digestlen * 8);
++#endif
+     }
+-    SHA3_clearstate(temp);
+     if (res != SUCCESS) {
+         PyErr_SetString(PyExc_RuntimeError, "internal error in SHA3 Final()");
+         return NULL;
+@@ -407,11 +431,27 @@
+     }
+ 
+     /* Get the raw (binary) digest value */
+-    ENTER_HASHLIB(self);
+-    SHA3_copystate(temp, self->hash_state);
+-    LEAVE_HASHLIB(self);
+-    res = SHA3_squeeze(&temp, digest, digestlen * 8);
+-    SHA3_clearstate(temp);
++    if(self->hashbitlen){
++        ENTER_HASHLIB(self);
++        SHA3_copystate(temp, self->hash_state);
++        LEAVE_HASHLIB(self);
++        res = SHA3_squeeze(&temp, digest, digestlen * 8);
++        SHA3_clearstate(temp);
++    }else{
++#ifdef WITH_THREAD
++        if(self->lock){
++            Py_BEGIN_ALLOW_THREADS
++            PyThread_acquire_lock(self->lock, 1);
++            res = SHA3_squeeze(&self->hash_state, digest, digestlen * 8);
++            PyThread_release_lock(self->lock);
++            Py_END_ALLOW_THREADS
++        } else {
++            res = SHA3_squeeze(&self->hash_state, digest, digestlen * 8);
++        }
++#else
++        res = SHA3_squeeze(&self->hash_state, digest, digestlen * 8);
++#endif
++    }
+     if (res != SUCCESS) {
+         PyErr_SetString(PyExc_RuntimeError, "internal error in SHA3 Squeeze()");
+         PyMem_Free(digest);
