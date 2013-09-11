@@ -14,7 +14,7 @@ options=(!emptydirs debug !strip)
 source=('hg+https://bitbucket.org/tiran/pykeccak'
         'variable-length-output.patch')
 sha256sums=('SKIP'
-            '464bcb9ee56c2c6059e41d3787b1ca7b0e72397d3c86fc5e4a78c78a1cbdc324')
+            '69549b1838d99e5f158185b10ce703109a81bed5775d5aec0448ca61f1f2b67a')
 _hgrepo='pykeccak'
 
 pkgver() {
@@ -24,7 +24,7 @@ pkgver() {
 
 build() {
   cd $_hgrepo
-  patch -p1 < "${srcdir}"/variable-length-output.patch
+  patch -p1 < "${srcdir}"/varout-state.patch
   python2 setup.py build
 }
 

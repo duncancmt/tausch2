@@ -1,5 +1,5 @@
 --- a/Modules/_sha3/sha3module.c	Wed Jul 31 13:33:01 2013 +0200
-+++ b/Modules/_sha3/sha3module.c	Tue Sep 10 18:52:29 2013 -0400
++++ b/Modules/_sha3/sha3module.c	Tue Sep 10 23:14:04 2013 -0400
 @@ -267,15 +267,27 @@
      SHA3_state temp;
      HashReturn res;
@@ -99,3 +99,46 @@
      if (res != SUCCESS) {
          PyErr_SetString(PyExc_RuntimeError, "internal error in SHA3 Squeeze()");
          PyMem_Free(digest);
+@@ -576,12 +616,42 @@
+ #endif
+ }
+ 
++static PyObject *
++SHA3_get_state(SHA3object *self, void *closure)
++{
++    return PyBytes_FromStringAndSize((const char *)&self->hash_state,
++                                     sizeof(SHA3_state));
++}
++
++static int
++SHA3_set_state(SHA3object *self, PyObject *value, void *closure)
++{
++    if (value == NULL) {
++        PyErr_SetString(PyExc_TypeError, "State cannot be deleted");
++        return -1;
++    }
++
++    if (! PyBytes_CheckExact(value)) {
++        PyErr_SetString(PyExc_TypeError, "Attribute state must be a bytes");
++        return -1;
++    }
++
++    if (PyBytes_Size(value) != sizeof(SHA3_state)) {
++        PyErr_Format(PyExc_ValueError, "Attribute state must be a bytes of length %d", sizeof(SHA3_state));
++        return -1;
++    }
++
++    memcpy(&self->hash_state, PyBytes_AsString(value), sizeof(SHA3_state));
++    return 0;
++}
++
+ static PyGetSetDef SHA3_getseters[] = {
+     {"block_size", (getter)SHA3_get_block_size, NULL, NULL, NULL},
+     {"name", (getter)SHA3_get_name, NULL, NULL, NULL},
+     {"digest_size", (getter)SHA3_get_digest_size, NULL, NULL, NULL},
+     {"_capacity_bits", (getter)SHA3_get_capacity_bits, NULL, NULL, NULL},
+     {"_rate_bits", (getter)SHA3_get_rate_bits, NULL, NULL, NULL},
++    {"state", (getter)SHA3_get_state, (setter)SHA3_set_state, NULL, NULL},
+     {NULL}  /* Sentinel */
+ };
+ 
