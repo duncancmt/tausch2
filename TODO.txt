@@ -40,3 +40,5 @@ fix timing attacks in Damgaard-Jurik
 see if Damgaard-Jurik should be using safe primes
 implement division in DamgaardJurikCiphertext
 implement permissive decoding in mnemonic.py
+check for bad uses of == and !=
+check for bad uses of raise
