@@ -1,19 +1,27 @@
+#### ORIGINAL LICENSE ####
 # The Keccak sponge function, designed by Guido Bertoni, Joan Daemen,
 # Michael Peeters and Gilles Van Assche. For more information, feedback or
 # questions, please refer to our website: http://keccak.noekeon.org/
 # 
 # Implementation by Renaud Bauvin,
 # hereby denoted as "the implementer".
-# Heavy modifications to make this more idiomatic by Duncan Townsend.
-# KeccakRandom written by Duncan Townsend.
 #
 # To the extent possible under law, the implementer has waived all copyright
 # and related or neighboring rights to the source code in this file.
 # http://creativecommons.org/publicdomain/zero/1.0/
 
+#### MODIFICATION TO ORIGINAL LICENSE ####
+# Heavy modifications to make this more idiomatic by Duncan Townsend.
+# KeccakRandom and KeccakCipher written by Duncan Townsend.
+#
+# These modifications are available under the same license as the rest of this
+# project
+
+import operator
 from math import ceil
 from binascii import hexlify
 from copy import deepcopy
+from itertools import imap
 from intbytes import int2bytes, bytes2int
 
 class KeccakError(RuntimeError):
@@ -478,4 +486,142 @@ class KeccakRandom(random_base):
         self._cache = 0L
         self._cache_len = 0L
 
-__all__ = ['Keccak', 'KeccakError', 'KeccakRandom']
+class KeccakCipher(object):
+    """Implements an authenticated symmetric encryption mode based on duplex Keccak"""
+    def __init__(self, key, nonce, encrypt_not_decrypt=True, keccak_args=dict()):
+        """Constructor:
+
+        key: the key to encrypt under, must be kept secret, must be a bytes
+        nonce: the nonce to be used for this block of encryption, must not be reused, must be a bytes
+        encrypt_not_decrypt: (optional) whether to perform encryption, default True
+        keccak_args: a dict of additional keyword arguments to Keccak (experts only)
+        """
+        if 'duplex' in keccak_args and not keccak_args['duplex']:
+            raise ValueError('KeccakCipher does not work with simplex Keccak')
+        keccak_args['duplex'] = True
+        self.k = Keccak(**keccak_args)
+
+        if len(key) < self.k.c // 8:
+            import warnings
+            warnings.warn('Key is shorter than the capacity of the cipher. The use of a short key weakens the cipher.')
+        if len(nonce) < self.k.c // 8:
+            import warnings
+            warnings.warn('Nonce is shorter than the capacity of the cipher. The use of a short nonce weakens the cipher.')
+
+
+        self.encrypt_not_decrypt=encrypt_not_decrypt
+        self.k(key)
+        self.last_block = self.k(nonce)
+        self.input_cache = ''
+        self._sentinel = object()
+
+    def encrypt(self, m):
+        """Encrypt the bytes m and return as much ciphertext as is available.
+        There may not be ciphertext available every time this method is called.
+        There is no guarantee about the length of the ciphertext compared to the length of the plaintext.
+        Ciphertext chunks must be fed to the decrypt method in the same order that they are produced
+            by the encrypt method.
+        """
+        if not self.encrypt_not_decrypt:
+            raise KeccakError('This instance is intended for decryption, not encryption')
+        if self.last_block is None:
+            raise KeccakError('MAC has already been emitted, no further encryption may be performed')
+
+        r = self.k.r
+
+        self.input_cache += m
+        retval = ''
+
+        for _ in xrange(len(self.input_cache)*8 // r):
+            chunk, self.input_cache = self.input_cache[:r//8], self.input_cache[r//8:]
+            retval += ''.join(imap(chr, imap(operator.xor, imap(ord, chunk),
+                                                           imap(ord, self.last_block))))
+            self.last_block = self.k(chunk)
+        return retval
+
+    def emit_mac(self):
+        """Call this method when all the plaintext has been supplied.
+        This method will return any remaining ciphertext chunks and the MAC, concatenated.
+        """
+        if not self.encrypt_not_decrypt:
+            raise KeccakError('This instance is intended for decryption, not encryption')
+        if self.last_block is None:
+            raise KeccakError('MAC has already been emitted, no further encryption may be performed')
+
+        r = self.k.r
+
+        retval = ''
+        if self.input_cache:
+            self.input_cache = self.k.pad10star1(self.input_cache, r)
+            print len(self.input_cache), repr(self.input_cache)
+            assert len(self.input_cache) == r//8
+            retval += self.encrypt('')
+            assert len(retval) == r//8
+            assert len(self.input_cache) == 0
+            self.input_cache = None
+
+        retval += self.last_block
+        self.last_block = None
+        return retval
+
+    def decrypt(self, m):
+        """Decrypt the bytes m and return as much plaintext as is available.
+        There may not be plaintext available every time this method is called.
+        There is no guarantee about the length of the plaintext compared to the length of the ciphertext.
+        Ciphertext chunks must be fed to the decrypt method in the same order that they were produced
+            by the encrypt method
+        """
+        if self.encrypt_not_decrypt:
+            raise KeccakError('This instance is intended for encryption, not decryption')
+        if self.last_block is None:
+            raise KeccakError('MAC has already been verified, no further decryption may be performed')
+
+        r = self.k.r
+
+        self.input_cache += m
+        retval = ''
+
+        for _ in xrange(len(self.input_cache)*8 // r):
+            chunk, self.input_cache = self.input_cache[:r//8], self.input_cache[r//8:]
+            plain = ''.join(imap(chr, imap(operator.xor, imap(ord, chunk),
+                                                         imap(ord, self.last_block))))
+            retval += plain
+            temp = self.k(plain)
+            print repr(self.input_cache)
+            print repr(temp)
+            if self.input_cache == temp:
+                self.input_cache = ''
+                self.last_block = self._sentinel
+                break
+            else:
+                self.last_block = temp
+        return retval
+
+    def verify_mac(self, mac=None):
+        """Call this method with the last chunk of ciphertext, or with the empty
+        string or no argument if all ciphertext has already been supplied to
+        decrypt.
+
+        This method returns None if the MAC matched and the message is authentic.
+        Otherwise, this method raises KeccakError if it has already been called
+            or ValueError if the MAC did not match and the mesage has been
+            tampered with.
+        """
+        if self.encrypt_not_decrypt:
+            raise KeccakError('This instance is intended for encryption, not decryption')
+        if self.last_block is None:
+            raise KeccakError('MAC has already been verified')
+        if (len(self.input_cache) + len(mac)) % (self.k.r // 8) != 0:
+            raise KeccakError('Requested MAC verification when not block-aligned')
+
+        if mac:
+            self.decrypt(mac)
+
+        if self.last_block is self._sentinel:
+            self.last_block = None
+            return
+        else:
+            self.last_block = None
+            raise ValueError('MAC did not match')
+
+__all__ = ['Keccak', 'KeccakError', 'KeccakRandom', 'KeccakCipher']
