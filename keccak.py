@@ -73,6 +73,7 @@ class Keccak(object):
         self.w = b//25
         self.l=(self.w-1).bit_length()
         self.nr=12+2*self.l
+        self.done_absorbing = False
 
         if has_fast and fixed_out and b == 1600 and c == 448:
             self.fast = True
@@ -103,7 +104,6 @@ class Keccak(object):
                       (0,0,0,0,0))
             self.P = ''
             self.output_cache = ''
-            self.done_absorbing = False
 
     # Constants
 
