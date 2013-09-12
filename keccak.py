@@ -338,7 +338,7 @@ class Keccak(object):
 
         self.P += M
 
-        for _ in xrange((len(self.P)*8)//r):
+        while len(self.P) >= r//8:
             chunk, self.P = self.P[:r//8], self.P[r//8:]
             if verbose:
                 print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(chunk), c//8))
@@ -488,6 +488,8 @@ class KeccakRandom(random_base):
 
 class KeccakCipher(object):
     """Implements an authenticated symmetric encryption mode based on duplex Keccak"""
+    # TODO: don't strip trailing padding from ciphertexts
+    # TODO: use encoded integers for length
     def __init__(self, key, nonce, encrypt_not_decrypt=True, keccak_args=dict()):
         """Constructor:
 
@@ -514,6 +516,7 @@ class KeccakCipher(object):
         self.last_block = self.k(nonce)
         self.input_cache = ''
         self._sentinel = object()
+        self.block_size = self.k.r//8 - 3
 
     def encrypt(self, m):
         """Encrypt the bytes m and return as much ciphertext as is available.
@@ -527,16 +530,18 @@ class KeccakCipher(object):
         if self.last_block is None:
             raise KeccakError('MAC has already been emitted, no further encryption may be performed')
 
-        r = self.k.r
-
         self.input_cache += m
         retval = ''
 
-        for _ in xrange(len(self.input_cache)*8 // r):
-            chunk, self.input_cache = self.input_cache[:r//8], self.input_cache[r//8:]
-            retval += ''.join(imap(chr, imap(operator.xor, imap(ord, chunk),
-                                                           imap(ord, self.last_block))))
+        while len(self.input_cache) >= self.block_size:
+            chunk, self.input_cache = self.input_cache[:self.block_size], self.input_cache[self.block_size:]
+            encoded_chunk_len = chr(len(chunk) % 0x100) + chr(len(chunk) / 0x100 % 0x100)
+            print repr(chunk)
+            retval += ''.join(imap(chr, imap(operator.xor, imap(ord, encoded_chunk_len + chunk),
+                                                           imap(ord, self.last_block[:-1]))))
             self.last_block = self.k(chunk)
+            assert len(self.last_block) == self.k.r//8
+        assert len(retval) % (self.k.r//8-1) == 0
         return retval
 
     def emit_mac(self):
@@ -547,21 +552,21 @@ class KeccakCipher(object):
             raise KeccakError('This instance is intended for decryption, not encryption')
         if self.last_block is None:
             raise KeccakError('MAC has already been emitted, no further encryption may be performed')
-
-        r = self.k.r
-
+        
         retval = ''
         if self.input_cache:
-            self.input_cache = self.k.pad10star1(self.input_cache, r)
-            print len(self.input_cache), repr(self.input_cache)
-            assert len(self.input_cache) == r//8
-            retval += self.encrypt('')
-            assert len(retval) == r//8
-            assert len(self.input_cache) == 0
-            self.input_cache = None
+            assert len(self.input_cache) < self.block_size
+            encoded_input_cache_len = chr(len(self.input_cache) % 0x100) + chr(len(self.input_cache) / 0x100 % 0x100)
+            last_ciphertext_block = ''.join(imap(chr, imap(operator.xor, imap(ord, self.k.pad10star1(encoded_input_cache_len + self.input_cache, self.k.r)),
+                                                                         imap(ord, self.last_block))))[:-1]
+            self.last_block = self.k(self.input_cache)
+            retval += last_ciphertext_block
 
+        assert len(self.last_block) == self.k.r//8
         retval += self.last_block
         self.last_block = None
+        self.input_cache = None
+        assert len(retval) % (self.k.r//8 - 1) == 1
         return retval
 
     def decrypt(self, m):
@@ -577,19 +582,25 @@ class KeccakCipher(object):
             raise KeccakError('MAC has already been verified, no further decryption may be performed')
 
         r = self.k.r
-
+        in_block_size = r//8 - 1
         self.input_cache += m
         retval = ''
 
-        for _ in xrange(len(self.input_cache)*8 // r):
-            chunk, self.input_cache = self.input_cache[:r//8], self.input_cache[r//8:]
+        while len(self.input_cache) >= in_block_size:
+            chunk, self.input_cache = self.input_cache[:in_block_size], self.input_cache[in_block_size:]
             plain = ''.join(imap(chr, imap(operator.xor, imap(ord, chunk),
-                                                         imap(ord, self.last_block))))
+                                                         imap(ord, self.last_block[:in_block_size]))))
+            plain_len = ord(plain[0]) + 0x100*ord(plain[1])
+            plain = plain[2:plain_len+2]
             retval += plain
             temp = self.k(plain)
+            assert len(temp) == self.k.r//8
+            print len(self.input_cache), len(temp), len(plain)
             print repr(self.input_cache)
             print repr(temp)
+            print repr(plain)
             if self.input_cache == temp:
+                print 'verified mac'
                 self.input_cache = ''
                 self.last_block = self._sentinel
                 break
@@ -597,7 +608,7 @@ class KeccakCipher(object):
                 self.last_block = temp
         return retval
 
-    def verify_mac(self, mac=None):
+    def verify_mac(self, mac=''):
         """Call this method with the last chunk of ciphertext, or with the empty
         string or no argument if all ciphertext has already been supplied to
         decrypt.
@@ -611,17 +622,19 @@ class KeccakCipher(object):
             raise KeccakError('This instance is intended for encryption, not decryption')
         if self.last_block is None:
             raise KeccakError('MAC has already been verified')
-        if (len(self.input_cache) + len(mac)) % (self.k.r // 8) != 0:
-            raise KeccakError('Requested MAC verification when not block-aligned')
-
-        if mac:
-            self.decrypt(mac)
 
         if self.last_block is self._sentinel:
             self.last_block = None
             return
         else:
-            self.last_block = None
-            raise ValueError('MAC did not match')
+            if (len(self.input_cache) + len(mac)) % (self.k.r//8 - 1) != 1:
+                raise KeccakError('Requested MAC verification when not block-aligned')
+
+            if mac:
+                self.decrypt(mac)
+                
+            if self.last_block is not self._sentinel:
+                self.last_block = None
+                raise ValueError('MAC did not match')
 
 __all__ = ['Keccak', 'KeccakError', 'KeccakRandom', 'KeccakCipher']
