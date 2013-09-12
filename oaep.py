@@ -21,7 +21,7 @@ def oaep_keccak(m, label='', out_len=None, hash_len=32, random=random, keccak_ar
     
     # hash the label
     k = Keccak(**keccak_args)
-    k.soak(label)
+    k.absorb(label)
     lhash = k.squeeze(hash_len)
 
     if out_len is not None:
@@ -38,7 +38,7 @@ def oaep_keccak(m, label='', out_len=None, hash_len=32, random=random, keccak_ar
 
     # expand rand_seed to the length of padded
     k = Keccak(**keccak_args)
-    k.soak(rand_seed)
+    k.absorb(rand_seed)
     mask = k.squeeze(len(padded))
 
     # XOR the message with the expanded r
@@ -47,7 +47,7 @@ def oaep_keccak(m, label='', out_len=None, hash_len=32, random=random, keccak_ar
 
     # hash masked to generate the seed mask
     k = Keccak(**keccak_args)
-    k.soak(masked)
+    k.absorb(masked)
     seed_mask = k.squeeze(len(rand_seed))
 
     # mask the seed
@@ -68,7 +68,7 @@ def unoaep_keccak(m, label='', hash_len=32, keccak_args=dict()):
     """
     # hash the label
     k = Keccak(**keccak_args)
-    k.soak(label)
+    k.absorb(label)
     lhash = k.squeeze(hash_len)
 
     # split the three parts of the OAEP'd message
@@ -76,7 +76,7 @@ def unoaep_keccak(m, label='', hash_len=32, keccak_args=dict()):
 
     # recover rand_seed
     k = Keccak(**keccak_args)
-    k.soak(masked)
+    k.absorb(masked)
     seed_mask = k.squeeze(len(masked_seed))
 
     rand_seed = ''.join(imap(chr, imap(xor, imap(ord, masked_seed),
@@ -84,7 +84,7 @@ def unoaep_keccak(m, label='', hash_len=32, keccak_args=dict()):
 
     # recover the original message
     k = Keccak(**keccak_args)
-    k.soak(rand_seed)
+    k.absorb(rand_seed)
     mask = k.squeeze(len(masked))
 
     padded = ''.join(imap(chr, imap(xor, imap(ord, masked),

@@ -22,7 +22,7 @@ class KeccakTestCase(unittest.TestCase):
         k = keccak.Keccak(r=self.keccak_args['r'],
                           c=self.keccak_args['c'],
                           fixed_out=True)
-        k.soak(self.input_vector)
+        k.absorb(self.input_vector)
         self.assertEqual(k.squeeze(self.keccak_args['n']), self.output_vector,
                          'input: %s\nparameters r=%d, c=%d, n=%d, fixed_out=True' \
                            % (repr(hexlify(self.input_vector)),
@@ -33,7 +33,7 @@ class KeccakTestCase(unittest.TestCase):
         k = keccak.Keccak(r=self.keccak_args['r'],
                           c=self.keccak_args['c'],
                           fixed_out=False)
-        k.soak(self.input_vector)
+        k.absorb(self.input_vector)
         self.assertEqual(k.squeeze(self.keccak_args['n']), self.output_vector,
                          'input: %s\nparameters r=%d, c=%d, n=%d, fixed_out=False' \
                            % (repr(hexlify(self.input_vector)),
@@ -98,7 +98,7 @@ class LongKeccakTestCase(KeccakTestCase):
                           c=self.keccak_args['c'],
                           fixed_out=True)
         for _ in xrange(self.repeats):
-            k.soak(self.input_vector)
+            k.absorb(self.input_vector)
         self.assertEqual(k.squeeze(self.keccak_args['n']), unhexlify(self.output_vector),
                          'parameters r=%d, c=%d, n=%d, fixed_out=True' \
                            % (self.keccak_args['r'],
@@ -109,7 +109,7 @@ class LongKeccakTestCase(KeccakTestCase):
                           c=self.keccak_args['c'],
                           fixed_out=False)
         for _ in xrange(self.repeats):
-            k.soak(self.input_vector)
+            k.absorb(self.input_vector)
         self.assertEqual(k.squeeze(self.keccak_args['n']), unhexlify(self.output_vector),
                          'parameters r=%d, c=%d, n=%d, fixed_out=False' \
                            % (self.keccak_args['r'],
