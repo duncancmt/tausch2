@@ -258,6 +258,7 @@ class Keccak(object):
         if n%8!=0:
             raise ValueError("n must be a multiple of 8")
 
+        M = deepcopy(M)
         if M_bit_len is None:
             M_bit_len = len(M)*8
         elif M_bit_len > len(M)*8:
@@ -267,23 +268,28 @@ class Keccak(object):
         nbr_bits_filled=M_bit_len%8
         l = M_bit_len % n
         if ((n-8) <= l <= (n-2)):
+            # We need only a single pad byte
             if (nbr_bits_filled == 0):
                 pad_byte = 0
             else:
-                pad_byte=ord(M[nr_bytes_filled:nr_bytes_filled+1])
-            pad_byte=(pad_byte>>(8-nbr_bits_filled))
-            pad_byte=pad_byte+2**(nbr_bits_filled)+2**7
-            M=M[0:nr_bytes_filled]+chr(pad_byte)
+                pad_byte = ord(M[nr_bytes_filled])
+            pad_byte >>= 8 - nbr_bits_filled
+            pad_byte += 2**nbr_bits_filled + 2**7
+            M = M[0:nr_bytes_filled]
+            M += chr(pad_byte)
         else:
+            # We need multiple pad bytes
             if (nbr_bits_filled == 0):
                 pad_byte = 0
             else:
-                pad_byte=ord(M[nr_bytes_filled:nr_bytes_filled+1])
-            pad_byte=(pad_byte>>(8-nbr_bits_filled))
-            pad_byte=pad_byte+2**(nbr_bits_filled)
-            M=M[0:nr_bytes_filled]+chr(pad_byte)
-            M=M+'\x00'*(n//8-1-len(M)%n)+'\x80'
+                pad_byte=ord(M[nr_bytes_filled])
+            pad_byte >>= 8 - nbr_bits_filled
+            pad_byte += 2**nbr_bits_filled
+            M = M[0:nr_bytes_filled]
+            M += chr(pad_byte)
+            M += '\x00'*(n//8-1-len(M)%(n//8))+'\x80'
 
+        assert len(M) % (n//8) == 0
         return M
 
     def __call__(self, M):
@@ -296,7 +302,7 @@ class Keccak(object):
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
         if len(M) >= r//8:
-            raise ValueError('Argument too long for duplex Keccak with r=%d' % d)
+            raise ValueError('Argument too long for duplex Keccak with r=%d' % r)
 
         M = self.pad10star1(M, r)
 
@@ -326,7 +332,7 @@ class Keccak(object):
         self.P += M
 
         for _ in xrange((len(self.P)*8)//r):
-            chunk, self.P = self.P[:(r//8)], self.P[(r//8):]
+            chunk, self.P = self.P[:r//8], self.P[r//8:]
             if verbose:
                 print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(chunk), c//8))
 
