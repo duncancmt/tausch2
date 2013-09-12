@@ -488,8 +488,6 @@ class KeccakRandom(random_base):
 
 class KeccakCipher(object):
     """Implements an authenticated symmetric encryption mode based on duplex Keccak"""
-    # TODO: don't strip trailing padding from ciphertexts
-    # TODO: use encoded integers for length
     def __init__(self, key, nonce, encrypt_not_decrypt=True, keccak_args=dict()):
         """Constructor:
 
@@ -510,13 +508,13 @@ class KeccakCipher(object):
             import warnings
             warnings.warn('Nonce is shorter than the capacity of the cipher. The use of a short nonce weakens the cipher.')
 
-
         self.encrypt_not_decrypt=encrypt_not_decrypt
         self.k(key)
         self.last_block = self.k(nonce)
         self.input_cache = ''
         self._sentinel = object()
-        self.block_size = self.k.r//8 - 3
+        self.plain_block_size = self.k.r//8 - 3
+        self.cipher_block_size = self.k.r//8
 
     def encrypt(self, m):
         """Encrypt the bytes m and return as much ciphertext as is available.
@@ -533,15 +531,18 @@ class KeccakCipher(object):
         self.input_cache += m
         retval = ''
 
-        while len(self.input_cache) >= self.block_size:
-            chunk, self.input_cache = self.input_cache[:self.block_size], self.input_cache[self.block_size:]
+        while len(self.input_cache) >= self.plain_block_size:
+            chunk, self.input_cache = self.input_cache[:self.plain_block_size], \
+                                      self.input_cache[self.plain_block_size:]
+            # It's safe to only use 2 bytes because Keccak's internal state can be at most
+            # 1600 bits, so all lengths can be represented in 16 bits.
             encoded_chunk_len = chr(len(chunk) % 0x100) + chr(len(chunk) / 0x100 % 0x100)
-            print repr(chunk)
-            retval += ''.join(imap(chr, imap(operator.xor, imap(ord, encoded_chunk_len + chunk),
-                                                           imap(ord, self.last_block[:-1]))))
+            padded = self.k.pad10star1(encoded_chunk_len + chunk, self.k.r)
+            retval += ''.join(imap(chr, imap(operator.xor, imap(ord, padded),
+                                                           imap(ord, self.last_block))))
             self.last_block = self.k(chunk)
-            assert len(self.last_block) == self.k.r//8
-        assert len(retval) % (self.k.r//8-1) == 0
+            assert len(self.last_block) == self.cipher_block_size
+        assert len(retval) % self.cipher_block_size == 0
         return retval
 
     def emit_mac(self):
@@ -555,18 +556,22 @@ class KeccakCipher(object):
         
         retval = ''
         if self.input_cache:
-            assert len(self.input_cache) < self.block_size
+            assert len(self.input_cache) < self.plain_block_size
+            # It's safe to only use 2 bytes because Keccak's internal state can be at most
+            # 1600 bits, so all lengths can be represented in 16 bits.
             encoded_input_cache_len = chr(len(self.input_cache) % 0x100) + chr(len(self.input_cache) / 0x100 % 0x100)
-            last_ciphertext_block = ''.join(imap(chr, imap(operator.xor, imap(ord, self.k.pad10star1(encoded_input_cache_len + self.input_cache, self.k.r)),
-                                                                         imap(ord, self.last_block))))[:-1]
+            padded = self.k.pad10star1(encoded_input_cache_len + self.input_cache, self.k.r)
+            last_ciphertext_block = ''.join(imap(chr, imap(operator.xor, imap(ord, padded),
+                                                                         imap(ord, self.last_block))))
+            assert len(last_ciphertext_block) == self.cipher_block_size
             self.last_block = self.k(self.input_cache)
             retval += last_ciphertext_block
 
-        assert len(self.last_block) == self.k.r//8
+        assert len(self.last_block) == self.cipher_block_size
         retval += self.last_block
         self.last_block = None
         self.input_cache = None
-        assert len(retval) % (self.k.r//8 - 1) == 1
+        assert len(retval) % self.cipher_block_size == 0
         return retval
 
     def decrypt(self, m):
@@ -581,34 +586,29 @@ class KeccakCipher(object):
         if self.last_block is None:
             raise KeccakError('MAC has already been verified, no further decryption may be performed')
 
-        r = self.k.r
-        in_block_size = r//8 - 1
         self.input_cache += m
         retval = ''
 
-        while len(self.input_cache) >= in_block_size:
-            chunk, self.input_cache = self.input_cache[:in_block_size], self.input_cache[in_block_size:]
-            plain = ''.join(imap(chr, imap(operator.xor, imap(ord, chunk),
-                                                         imap(ord, self.last_block[:in_block_size]))))
-            plain_len = ord(plain[0]) + 0x100*ord(plain[1])
-            plain = plain[2:plain_len+2]
-            retval += plain
-            temp = self.k(plain)
-            assert len(temp) == self.k.r//8
-            print len(self.input_cache), len(temp), len(plain)
-            print repr(self.input_cache)
-            print repr(temp)
-            print repr(plain)
-            if self.input_cache == temp:
-                print 'verified mac'
+        while len(self.input_cache) >= self.cipher_block_size:
+            if self.input_cache == self.last_block: # TODO: do a timing resistant comparison here
                 self.input_cache = ''
                 self.last_block = self._sentinel
                 break
-            else:
-                self.last_block = temp
+
+            chunk, self.input_cache = self.input_cache[:self.cipher_block_size], \
+                                      self.input_cache[self.cipher_block_size:]
+            plain = ''.join(imap(chr, imap(operator.xor, imap(ord, chunk),
+                                                         imap(ord, self.last_block))))
+            # It's safe to only use 2 bytes because Keccak's internal state can be at most
+            # 1600 bits, so all lengths can be represented in 16 bits.
+            plain_len = ord(plain[0]) + 0x100*ord(plain[1])
+            plain = plain[2:plain_len+2]
+            retval += plain
+            self.last_block = self.k(plain)
+            assert len(self.last_block) == self.cipher_block_size
         return retval
 
-    def verify_mac(self, mac=''):
+    def verify_mac(self, mac=None):
         """Call this method with the last chunk of ciphertext, or with the empty
         string or no argument if all ciphertext has already been supplied to
         decrypt.
@@ -623,18 +623,14 @@ class KeccakCipher(object):
         if self.last_block is None:
             raise KeccakError('MAC has already been verified')
 
+        if mac:
+            self.decrypt(mac)
+
         if self.last_block is self._sentinel:
             self.last_block = None
             return
         else:
-            if (len(self.input_cache) + len(mac)) % (self.k.r//8 - 1) != 1:
-                raise KeccakError('Requested MAC verification when not block-aligned')
-
-            if mac:
-                self.decrypt(mac)
-                
-            if self.last_block is not self._sentinel:
-                self.last_block = None
-                raise ValueError('MAC did not match')
+            self.last_block = None
+            raise ValueError('MAC did not match')
 
 __all__ = ['Keccak', 'KeccakError', 'KeccakRandom', 'KeccakCipher']
