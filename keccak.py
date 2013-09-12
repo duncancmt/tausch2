@@ -356,17 +356,17 @@ class Keccak(object):
         assert len(self.P) == 0
         return self.squeeze(r//8, _ignore_duplex=True)
 
-    def absorb(self, M):
+    def absorb(self, M, _ignore_duplex=False):
         """Perform the absorbing phase of Keccak: data is mixed into the internal state
         
         M: the string to be absorbed
         """
         if self.duplex and not _ignore_duplex:
             raise KeccakError('Duplex Keccak cannot absorb or squeeze, call this object instead')
-        if self.fast:
-            return self.fast_impl.update(M)
         if self.done_absorbing and not _ignore_duplex:
             raise KeccakError('Cannot continue absorbing once squeezing has begun')
+        if self.fast:
+            return self.fast_impl.update(M)
 
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
@@ -409,6 +409,7 @@ class Keccak(object):
             raise KeccakError('Duplex Keccak cannot absorb or squeeze, call this object instead')
 
         if self.fast:
+            self.done_absorbing = True
             if self.fixed_out:
                 tmp = self.fast_impl.copy() # TODO use copy.deepcopy
                 retval = self.fast_impl.squeeze(n)
@@ -572,6 +573,9 @@ class KeccakCipher(object):
         if 'duplex' in keccak_args and not keccak_args['duplex']:
             raise ValueError('KeccakCipher does not work with simplex Keccak')
         keccak_args['duplex'] = True
+        if 'fixed_out' in keccak_args and keccak_args['fixed_out']:
+            raise ValueError('KeccakCipher does not work with fixed output Keccak')
+        keccak_args['fixed_out'] = False
         self.k = Keccak(**keccak_args)
 
         if len(key) < self.k.c // 8:
