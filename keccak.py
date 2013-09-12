@@ -60,7 +60,7 @@ class Keccak(object):
                   [0,0,0,0,0]]
         self.P = ''
         self.output_cache = ''
-        self.done_soaking = False
+        self.done_absorbing = False
 
     # Constants
 
@@ -294,17 +294,16 @@ class Keccak(object):
 
     def __call__(self, M):
         """If this instance is duplex, permforms the duplex Keccak operations,
-        otherwise does the same as soak
+        otherwise does the same as absorb
         """
         if not self.duplex:
-            return self.soak(M)
+            return self.absorb(M)
 
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
-        if len(M) >= r//8:
-            raise ValueError('Argument too long for duplex Keccak with r=%d' % r)
-
         M = self.pad10star1(M, r)
+        if len(M) > r//8:
+            raise ValueError('Argument too long for duplex Keccak with r=%d' % r)
 
         if verbose:
             print("String ready to be absorbed: %s (will be completed by %d x NUL)" % (hexlify(M), c//8))
@@ -317,15 +316,15 @@ class Keccak(object):
         self.S = self.KeccakF(self.S, nr, w, verbose)
         return self.convertTableToStr(self.S, w)[:r//8]
 
-    def soak(self, M):
-        """Perform the soaking phase of Keccak: data is mixed into the internal state
+    def absorb(self, M):
+        """Perform the absorbing phase of Keccak: data is mixed into the internal state
         
-        M: the string to be soaked
+        M: the string to be absorbed
         """
-        if self.done_soaking:
-            raise KeccakError('Cannot continue soaking once squeezing has begun')
+        if self.done_absorbing:
+            raise KeccakError('Cannot continue absorbing once squeezing has begun')
         if self.duplex:
-            raise KeccakError('Duplex Keccak cannot soak or squeeze, call this object instead')
+            raise KeccakError('Duplex Keccak cannot absorb or squeeze, call this object instead')
 
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
@@ -364,15 +363,15 @@ class Keccak(object):
         w, r, nr, verbose = self.w, self.r, self.nr, self.verbose
 
         if self.duplex:
-            raise KeccakError('Duplex Keccak cannot soak or squeeze, call this object instead')
+            raise KeccakError('Duplex Keccak cannot absorb or squeeze, call this object instead')
 
         # pad the remaining input and add it to the internal state
-        if not self.done_soaking:
+        if not self.done_absorbing:
             assert self.output_cache == ''
             self.P = self.pad10star1(self.P, r)
             assert len(self.P) == r // 8
-            self.soak('')
-            self.done_soaking = True
+            self.absorb('')
+            self.done_absorbing = True
 
         assert self.P == ''
 
@@ -453,7 +452,7 @@ class KeccakRandom(random_base):
                 print 'reading %d bytes from /dev/random' % int(ceil(self.k.c / 8.0))
                 for _ in xrange(int(ceil(self.k.c / 8.0))):
                     seed += randfile.read(1)
-        self.k.soak(seed)
+        self.k.absorb(seed)
 
         self._cache = 0L
         self._cache_len = 0L

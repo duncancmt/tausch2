@@ -22,7 +22,7 @@ class KeccakTestCase(unittest.TestCase):
         self.k = keccak.Keccak(r=self.keccak_args['r'],
                                c=self.keccak_args['c'])
     def runTest(self):
-        self.k.soak(self.input_vector)
+        self.k.absorb(self.input_vector)
         self.assertEqual(self.k.squeeze(self.keccak_args['n']), self.output_vector,
                          'input: %s\nparameters r=%d, c=%d, n=%d' % (repr(hexlify(self.input_vector)),
                                                                      self.keccak_args['r'],
@@ -83,7 +83,7 @@ class LongKeccakTestCase(KeccakTestCase):
         super(LongKeccakTestCase, self).__init__(*args)
     def runTest(self):
         for _ in xrange(self.repeats):
-            self.k.soak(self.input_vector)
+            self.k.absorb(self.input_vector)
         self.assertEqual(self.k.squeeze(self.keccak_args['n']), unhexlify(self.output_vector),
                          'parameters r=%d, c=%d, n=%d' % (self.keccak_args['r'],
                                                           self.keccak_args['c'],

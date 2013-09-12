@@ -80,7 +80,7 @@ def encode(s, compact=False):
         raise TypeError("mnemonic.encode can only encode byte strings")
 
     k = Keccak()
-    k.soak(s)
+    k.absorb(s)
     checksum_length = max(1, (len(s)-1).bit_length())
     checksum = k.squeeze(checksum_length)
 
@@ -138,7 +138,7 @@ def decode(w, compact=False):
         raise ValueError("Invalid length")
 
     k = Keccak()
-    k.soak(s)
+    k.absorb(s)
     if k.squeeze(checksum_length) != checksum:
         raise ValueError("Invalid checksum")
 
@@ -160,7 +160,7 @@ def randomart(s, height=9, width=17, length=64, border=True, tag=''):
         does nothing if border is False, defaults to the empty string
     """
     k = Keccak()
-    k.soak(s)
+    k.absorb(s)
     # we reverse the endianness so that increasing length produces a radically
     # different randomart
     i = bytes2int(reversed(k.squeeze(int(ceil(length / 4.0)))))
