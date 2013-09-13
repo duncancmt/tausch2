@@ -95,10 +95,11 @@ def unoaep_keccak(m, label='', hash_len=32, keccak_args=dict()):
     separator_index = hash_len
     tru = True
     for i in xrange(hash_len,len(padded)):
-        if (not found_separator) + (padded[i] != '\x00') == 2: # use + to avoid short-circuiting
+        condition = (not found_separator) + (padded[i] != '\x00') == 2 # use + to avoid short-circuiting
+        if condition: 
             separator_index = i
             found_separator = tru
-        else:
+        if not condition:
             separator_index = separator_index
             found_separator = found_separator
             
