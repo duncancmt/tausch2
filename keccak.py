@@ -356,6 +356,10 @@ class Keccak(object):
         assert len(self.P) == 0
         return self.squeeze(r//8, _ignore_duplex=True)
 
+    def update(self, M):
+        """Does the same as absorb"""
+        return self.absorb(M)
+
     def absorb(self, M, _ignore_duplex=False):
         """Perform the absorbing phase of Keccak: data is mixed into the internal state
         
@@ -389,13 +393,13 @@ class Keccak(object):
                 print("Value after absorption : %s" % (hexlify(self.convertTableToStr(self.S, w))))
         assert len(self.P) < r // 8
 
-    def digest(self, n=64):
+    def digest(self):
         """Does the same as squeeze"""
-        return self.squeeze(n)
+        return self.squeeze(self.c//16)
 
-    def hexdigest(self, n=64):
+    def hexdigest(self):
         """Convenience function that returns the hexadecimal version of the digest"""
-        return hexlify(self.squeeze(n))
+        return hexlify(self.digest())
 
     def squeeze(self, n, _ignore_duplex=False):
         """Perform the squeezing phase of Keccak: arbitrary-length digest output is produced from the internal state
@@ -578,6 +582,10 @@ class KeccakCipher(object):
         keccak_args['fixed_out'] = False
         self.k = Keccak(**keccak_args)
 
+        if not isinstance(key, bytes):
+            raise TypeError("key must be a bytes")
+        if not isinstance(nonce, bytes):
+            raise TypeError("nonce must be a bytes")
         if len(key) < self.k.c // 8:
             import warnings
             warnings.warn('Key is shorter than the capacity of the cipher. The use of a short key weakens the cipher.')
@@ -604,6 +612,8 @@ class KeccakCipher(object):
             raise KeccakError('This instance is intended for decryption, not encryption')
         if self.last_block is None:
             raise KeccakError('MAC has already been emitted, no further encryption may be performed')
+        if not isinstance(m, bytes):
+            raise TypeError("argument must be a bytes")
 
         self.input_cache += m
         retval = ''
@@ -662,6 +672,8 @@ class KeccakCipher(object):
             raise KeccakError('This instance is intended for encryption, not decryption')
         if self.last_block is None:
             raise KeccakError('MAC has already been verified, no further decryption may be performed')
+        if not isinstance(m, bytes):
+            raise TypeError("argument must be a bytes")
 
         self.input_cache += m
         retval = ''
