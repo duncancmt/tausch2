@@ -1,8 +1,6 @@
 from binascii import unhexlify
 
-# everything is the one-true endianness, little endian
-
-def int2bytes(i, length=None):
+def int2bytes(i, length=None, endian='little'):
     """Convert an integer to a string (bytes):
 
     i: the integer to be converted
@@ -21,13 +19,24 @@ def int2bytes(i, length=None):
     # Oh BDFL, forgive us our abuses!
     format_string = '%%0%dx' % (length * 2)
     hex_string = format_string % i
-    return unhexlify(hex_string)[::-1]
 
-def bytes2int(b):
+    if endian == 'little':
+        return unhexlify(hex_string)[::-1]
+    elif endian == 'big':
+        return unhexlify(hex_string)
+    else:
+        raise TypeError('Argument endian must be either \'big\' or \'little\'')
+
+def bytes2int(b, endian='little'):
     """Convert a string (bytes) to an integer:
 
     b: the string (bytes) to be converted
     """
-    return sum(ord(char) << (i * 8) for i, char in enumerate(b))
+    if endian == 'little':
+        return sum(ord(char) << (i * 8) for i, char in enumerate(b))
+    elif endian == 'big':
+        return sum(ord(char) << (i * 8) for i, char in enumerate(reversed(b)))
+    else:
+        raise TypeError('Argument endian must be either \'big\' or \'little\'')
 
 __all__ = ['int2bytes', 'bytes2int']
