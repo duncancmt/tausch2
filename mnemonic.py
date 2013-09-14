@@ -16,8 +16,6 @@ def encode_int(i,endian='little'):
     null, so after transforming to and from an int (little endian), the string
     will be unchanged.
     """
-    if not isinstance(i, (int, long)):
-        raise TypeError("mnemonic.encode_int only encodes int and long")
     if endian not in ('little', 'big'):
         raise TypeError('Argument endian must be either \'big\' or \'little\'')
 
@@ -59,8 +57,6 @@ def decode_int(s,endian='little'):
     The bytes consumed indicates how long the encoded integer was. This is
     useful if the integer was appended to some data.
     """
-    if not isinstance(s, bytes):
-        raise TypeError("mnemonic.decode_int only decodes byte strings")
     if endian not in ('little', 'big'):
         raise TypeError('Argument endian must be either \'big\' or \'little\'')
 
