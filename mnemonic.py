@@ -1,98 +1,10 @@
 import cPickle
-from intbytes import int2bytes, bytes2int
+from intbytes import int2bytes, bytes2int, encode_varint, decode_varint
 from math import log, floor, ceil
 from keccak import Keccak
-from itertools import izip, count
 
 words = cPickle.Unpickler(open('words.pkl','rb')).load()
-rwords = dict(izip(words, count()))
-
-def encode_int(i,endian='little'):
-    """Produce a byte encoding of an integer.
-
-    The encoding captures both the value and length of the integer, so appending
-    the encoded integer to arbitrary data will not effect the ability to decode
-    the integer. In addition, the encoding never produces a string ending in a
-    null, so after transforming to and from an int (little endian), the string
-    will be unchanged.
-    """
-    if endian not in ('little', 'big'):
-        raise TypeError('Argument endian must be either \'big\' or \'little\'')
-
-    encoded = ''
-    # the final byte (most-significant byte little-endian) is never 0x00
-    if i+1 < 0xfb:
-        signifier = chr(i+1)
-    elif i <= 0xff:
-        signifier = chr(0xfb)
-        encoded = chr(i)
-    elif i <= 0xffff:
-        signifier = chr(0xfc)
-        encoded = int2bytes(i,2,endian=endian)
-    elif i <= 0xffffffff:
-        signifier = chr(0xfd)
-        encoded = int2bytes(i,4,endian=endian)
-    elif i <= 0xffffffffffffffff:
-        signifier = chr(0xfe)
-        encoded = int2bytes(i,8,endian=endian)
-    else:
-        l = (i.bit_length() - 1) // 8 + 1
-        s = int2bytes(i,l)
-        assert len(s) == l
-        signifier = chr(0xff)
-        if endian == 'little':
-            encoded = s + encode_int(l,endian=endian)
-        else:
-            encoded = encode_int(l,endian=endian) + s
-
-    if endian == 'little':
-        return encoded + signifier
-    else:
-        return signifier + encoded
-    
-def decode_int(s,endian='little'):
-    """Decode an string produced by mnemonic.encode_int
-
-    returns a 2-tuple of (integer, bytes consumed)
-    The bytes consumed indicates how long the encoded integer was. This is
-    useful if the integer was appended to some data.
-    """
-    if endian not in ('little', 'big'):
-        raise TypeError('Argument endian must be either \'big\' or \'little\'')
-
-    if endian == 'little':
-        signifier, encoded = s[-1], s[:-1]
-    else:
-        signifier, encoded = s[0], s[1:]
-    signifier = ord(signifier)
-    if signifier == 0:
-        raise ValueError("this encoding scheme never has a null signifier")
-
-    if signifier < 0xfb:
-        return (signifier-1, 1)
-    elif signifier == 0xfb:
-        return (ord(encoded), 2)
-    elif signifier == 0xfc:
-        bounds = 2
-        consumed = 3
-    elif signifier == 0xfd:
-        bounds = 4
-        consumed = 5
-    elif signifier == 0xfe:
-        bounds = 8
-        consumed = 9
-    elif signifier == 0xff:
-        (bounds, consumed) = decode_int(encoded, endian=endian)
-        if endian == 'little':
-            encoded = encoded[:-consumed]
-        else:
-            encoded = encoded[consumed:]
-        consumed += bounds + 1
-
-    if endian == 'little':
-        return (bytes2int(encoded[-bounds:], endian=endian), consumed)
-    else:
-        return (bytes2int(encoded[:bounds], endian=endian), consumed)
+rwords = dict(enumerate(words))
 
 def encode(s, compact=False):
     """From a byte string, produce a list of words that durably encodes the string.
@@ -112,7 +24,7 @@ def encode(s, compact=False):
     checksum_length = max(1, (len(s)-1).bit_length())
     checksum = k.squeeze(checksum_length)
 
-    length = chr(checksum_length) if compact else encode_int(len(s))
+    length = chr(checksum_length) if compact else encode_varint(len(s))
 
     s += checksum
     s += length
@@ -157,7 +69,7 @@ def decode(w, compact=False):
         consumed = 1
         length = len(s) - checksum_length - consumed
     else:
-        (length, consumed) = decode_int(s)
+        (length, consumed) = decode_varint(s)
         checksum_length = max(1, (len(s)-1).bit_length())
 
     s = s[:-consumed]
