@@ -1,7 +1,7 @@
 try:
     from hmac import compare_digest as secure_compare
 except ImportError:
-    from operator import _or, xor
+    from operator import or_, xor
     from itertools import imap
     
     def secure_compare(a,b):
