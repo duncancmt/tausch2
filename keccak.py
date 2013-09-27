@@ -23,6 +23,7 @@ from binascii import hexlify
 from copy import copy, deepcopy
 from itertools import imap
 from intbytes import int2bytes, bytes2int
+from util import secure_compare
 
 class KeccakError(RuntimeError):
     """Class of error used in the Keccak implementation
@@ -75,35 +76,40 @@ class Keccak(object):
         self.nr=12+2*self.l
         self.done_absorbing = False
 
-        if has_fast and fixed_out and b == 1600 and c == 448:
-            self.fast = True
-            self.fast_impl = _sha3.sha3_224()
-        elif has_fast and fixed_out and b == 1600 and c == 512:
-            self.fast = True
-            self.fast_impl = _sha3.sha3_256()
-        elif has_fast and fixed_out and b == 1600 and c == 768:
-            self.fast = True
-            self.fast_impl = _sha3.sha3_384()
-        elif has_fast and fixed_out and b == 1600 and c == 1024:
-            self.fast = True
-            self.fast_impl = _sha3.sha3_512()
-        elif has_fast and not fixed_out and b == 1600 and c == 576:
-            self.fast = True
-            self.fast_impl = _sha3.sha3_0()
-        else:
-            self.fast = False
+        if has_fast and not duplex:
+            if fixed_out and b == 1600 and c == 448:
+                self.fast = True
+                self.fast_impl = _sha3.sha3_224()
+                return
+            elif fixed_out and b == 1600 and c == 512:
+                self.fast = True
+                self.fast_impl = _sha3.sha3_256()
+                return
+            elif fixed_out and b == 1600 and c == 768:
+                self.fast = True
+                self.fast_impl = _sha3.sha3_384()
+                return
+            elif fixed_out and b == 1600 and c == 1024:
+                self.fast = True
+                self.fast_impl = _sha3.sha3_512()
+                return
+            elif not fixed_out and b == 1600 and c == 576:
+                self.fast = True
+                self.fast_impl = _sha3.sha3_0()
+                return
 
-            if verbose:
-                print "Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25)
+        self.fast = False
+        if verbose:
+            print "Create a Keccak function with (r=%d, c=%d (i.e. w=%d))" % (r,c,(r+c)//25)
 
-            # Initialisation of state
-            self.S = ((0,0,0,0,0),
-                      (0,0,0,0,0),
-                      (0,0,0,0,0),
-                      (0,0,0,0,0),
-                      (0,0,0,0,0))
-            self.P = ''
-            self.output_cache = ''
+        # Initialisation of state
+        self.S = ((0,0,0,0,0),
+                  (0,0,0,0,0),
+                  (0,0,0,0,0),
+                  (0,0,0,0,0),
+                  (0,0,0,0,0))
+        self.P = ''
+        self.output_cache = ''
 
     # Constants
 
@@ -342,9 +348,6 @@ class Keccak(object):
         """
         if not self.duplex:
             return self.absorb(M)
-
-        if self.fast:
-            raise NotImplementedError
         
         r, c, b, w, nr, verbose = self.r, self.c, self.b, self.w, self.nr, self.verbose
 
@@ -427,7 +430,7 @@ class Keccak(object):
             assert self.output_cache == ''
             self.P = self.pad10star1(self.P, r)
             assert len(self.P) == r // 8
-            self.absorb('')
+            self.absorb('', _ignore_duplex=_ignore_duplex)
             self.done_absorbing = True
 
         assert self.P == ''
@@ -593,13 +596,22 @@ class KeccakCipher(object):
             import warnings
             warnings.warn('Nonce is shorter than the capacity of the cipher. The use of a short nonce weakens the cipher.')
 
-        self.encrypt_not_decrypt=encrypt_not_decrypt
-        self.k(key)
-        self.last_block = self.k(nonce)
         self.input_cache = ''
         self._sentinel = object()
-        self.plain_block_size = self.k.r//8 - 3
+        self.plain_block_size = self.k.r//8 - 3 # one byte for encoding the length,
+                                                # one byte for the domain,
+                                                # one byte for the padding
         self.cipher_block_size = self.k.r//8
+        self.cipher_round_byte = '\x00'
+        self.mac_round_byte = '\x01'
+
+        self.encrypt_not_decrypt = True
+        self.last_block = '\x00'*self.cipher_block_size
+        self.encrypt(key)
+        self.last_block = self.emit_mac()[-self.cipher_block_size:]
+        self.encrypt(nonce)
+        self.last_block = self.emit_mac()[-self.cipher_block_size:]
+        self.encrypt_not_decrypt=encrypt_not_decrypt
 
     def encrypt(self, m):
         """Encrypt the bytes m and return as much ciphertext as is available.
@@ -621,10 +633,13 @@ class KeccakCipher(object):
         while len(self.input_cache) >= self.plain_block_size:
             chunk, self.input_cache = self.input_cache[:self.plain_block_size], \
                                       self.input_cache[self.plain_block_size:]
-            # It's safe to only use 2 bytes because Keccak's internal state can be at most
-            # 1600 bits, so all lengths can be represented in 16 bits.
-            encoded_chunk_len = chr(len(chunk) % 0x100) + chr(len(chunk) / 0x100 % 0x100)
-            padded = self.k.pad10star1(encoded_chunk_len + chunk, self.k.r)
+            # It's safe to only use 1 byte because Keccak's bit rate can be at most
+            # 1600 bits, so all byte-lengths can be represented in 8 bits.
+            encoded_chunk_len = chr(len(chunk))
+            chunk = encoded_chunk_len + chunk + self.cipher_round_byte
+            padded = self.k.pad10star1(chunk, self.k.r)
+            assert len(self.last_block) == self.cipher_block_size
+            assert len(padded) == self.cipher_block_size
             retval += ''.join(imap(chr, imap(operator.xor, imap(ord, padded),
                                                            imap(ord, self.last_block))))
             self.last_block = self.k(chunk)
@@ -642,22 +657,24 @@ class KeccakCipher(object):
             raise KeccakError('MAC has already been emitted, no further encryption may be performed')
         
         retval = ''
-        if self.input_cache:
-            assert len(self.input_cache) < self.plain_block_size
-            # It's safe to only use 2 bytes because Keccak's internal state can be at most
-            # 1600 bits, so all lengths can be represented in 16 bits.
-            encoded_input_cache_len = chr(len(self.input_cache) % 0x100) + chr(len(self.input_cache) / 0x100 % 0x100)
-            padded = self.k.pad10star1(encoded_input_cache_len + self.input_cache, self.k.r)
-            last_ciphertext_block = ''.join(imap(chr, imap(operator.xor, imap(ord, padded),
-                                                                         imap(ord, self.last_block))))
-            assert len(last_ciphertext_block) == self.cipher_block_size
-            self.last_block = self.k(self.input_cache)
-            retval += last_ciphertext_block
+        assert len(self.input_cache) < self.plain_block_size
+        # It's safe to only use 1 byte because Keccak's bit rate can be at most
+        # 1600 bits, so all byte-lengths can be represented in 8 bits.
+        encoded_input_cache_len = chr(len(self.input_cache))
+        self.input_cache = encoded_input_cache_len + self.input_cache + self.mac_round_byte
+        padded = self.k.pad10star1(self.input_cache, self.k.r)
+        assert len(self.last_block) == self.cipher_block_size
+        final_ciphertext_block = ''.join(imap(chr, imap(operator.xor, imap(ord, padded),
+                                                                      imap(ord, self.last_block))))
+        assert len(final_ciphertext_block) == self.cipher_block_size
+        retval += final_ciphertext_block
 
+        self.last_block = self.k(self.input_cache)
         assert len(self.last_block) == self.cipher_block_size
         retval += self.last_block
+
         self.last_block = None
-        self.input_cache = None
+        self.input_cache = ''
         assert len(retval) % self.cipher_block_size == 0
         return retval
 
@@ -679,6 +696,7 @@ class KeccakCipher(object):
         retval = ''
 
         while len(self.input_cache) >= self.cipher_block_size:
+            assert len(self.last_block) == self.cipher_block_size
             if secure_compare(self.input_cache, self.last_block):
                 self.input_cache = ''
                 self.last_block = self._sentinel
@@ -688,12 +706,13 @@ class KeccakCipher(object):
                                       self.input_cache[self.cipher_block_size:]
             plain = ''.join(imap(chr, imap(operator.xor, imap(ord, chunk),
                                                          imap(ord, self.last_block))))
-            # It's safe to only use 2 bytes because Keccak's internal state can be at most
-            # 1600 bits, so all lengths can be represented in 16 bits.
-            plain_len = ord(plain[0]) + 0x100*ord(plain[1])
-            plain = plain[2:plain_len+2]
-            retval += plain
+            # It's safe to only use 1 byte because Keccak's bit rate can be at most
+            # 1600 bits, so all byte-lengths can be represented in 8 bits.
+            plain_len = ord(plain[0])
+            plain = plain[:plain_len+2] # keeps both length byte and domain byte, but strips padding
             self.last_block = self.k(plain)
+            plain = plain[1:plain_len+1] # strips length byte and domain byte
+            retval += plain
             assert len(self.last_block) == self.cipher_block_size
         return retval
 
