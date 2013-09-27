@@ -4,6 +4,7 @@ from itertools import *
 
 from keccak import Keccak
 from intbytes import int2bytes, bytes2int
+from util import secure_compare
 
 def oaep_keccak(m, label='', out_len=None, hash_len=32, random=random, keccak_args=dict()):
     """Perform OAEP (as specified by PKCS#1v2.1) with Keccak as the one-way function
@@ -108,8 +109,7 @@ def unoaep_keccak(m, label='', hash_len=32, keccak_args=dict()):
 
     # check that lhash matches, the separator is correct, and the leading NUL is preserved
     # without leaking which one failed
-    if sum([ reduce(or_, imap(xor, imap(ord, lhash),
-                                   imap(ord, lhash_)), 0) == 0,
+    if sum([ secure_compare(lhash, lhash_),
              separator == '\x01',
              Y == '\x00' ]) != 3:
         raise ValueError("Decryption failed")
