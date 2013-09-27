@@ -679,12 +679,7 @@ class KeccakCipher(object):
         retval = ''
 
         while len(self.input_cache) >= self.cipher_block_size:
-            # This leaks the length of the input cache, but that's not really a
-            # concern, seeing as that information is leaked anyway by the number
-            # of times the loop iterates
-            if reduce(operator.or_, imap(operator.xor, imap(ord, self.input_cache),
-                                                       imap(ord, self.last_block)), 0) \
-               == 0:
+            if secure_compare(self.input_cache, self.last_block):
                 self.input_cache = ''
                 self.last_block = self._sentinel
                 break
