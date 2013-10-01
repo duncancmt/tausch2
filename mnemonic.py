@@ -1,11 +1,48 @@
 import cPickle
-from itertools import izip, count
+import string
+from itertools import imap, izip, count, chain
 from intbytes import int2bytes, bytes2int, encode_varint, decode_varint
 from math import log, floor, ceil
 from keccak import Keccak
 
 words = cPickle.Unpickler(open('words.pkl','rb')).load()
 rwords = dict(izip(words,count()))
+
+def dldist(s, n):
+    def flatten(lol):
+        return chain.from_iterable(lol)
+
+    def onedldist(s):
+        num_deletions = len(s)
+        num_insertion_positions = len(s)+1
+        num_insertion_values = len(string.ascii_lowercase)
+        num_insertions = num_insertion_positions*num_insertion_values
+        num_transpositions = len(s)-1
+        num_substitution_positions = len(s)
+        num_substitution_values = len(string.ascii_lowercase)
+        num_substitutions = num_substitution_positions*num_substitution_values
+
+        # deletions
+        for j in xrange(num_deletions):
+            yield s[:j]+s[j+1:]
+        # insertions
+        for j in xrange(num_insertion_positions):
+            for k in xrange(num_insertion_values):
+                yield s[:j]+string.ascii_lowercase[k]+s[j:]
+        # transpositions
+        for j in xrange(num_transpositions):
+            yield s[:j]+s[j+1]+s[j]+s[j+2:]
+        # substitutions
+        for j in xrange(num_substitution_positions):
+            for k in xrange(num_substitution_values):
+                yield s[:j]+string.ascii_lowercase[k]+s[j+1:]
+        raise StopIteration
+
+    if n == 1:
+        return set(onedldist(s))
+    else:
+        return set(flatten(imap(onedldist, dldist(s, n-1))))
+
 
 def encode(s, compact=False):
     """From a byte string, produce a list of words that durably encodes the string.
@@ -42,27 +79,39 @@ def encode(s, compact=False):
     assert i == 0
     return tuple(retval)
 
-def decode(w, compact=False):
+def decode(w, compact=False, permissive=False):
     """From a list of words, or a whitespace-separated string of words, produce
     the original string that was encoded.
 
     w: the list of words, or whitespace delimited words to be decoded
     compact: compact encoding was used instead of length encoding
+    permissive: if there are spelling errors, correct them instead of throwing
+        an error (will still throw ValueError if spelling can't be corrected)
 
     Raises ValueError if the encoding is invalid.
     """
     if isinstance(w, bytes):
         w = w.split()
 
-    try:
-        indexes = map(lambda x: rwords[x], w)
-    except KeyError:
-        raise ValueError('Unrecognized word')
+    indexes = [None]*len(w)
+    for i,word in enumerate(w):
+        if word in rwords:
+            indexes[i] = rwords[word]
+        elif permissive:
+            for nearby in dldist(word, 1):
+                if nearby in rwords:
+                    indexes[i] = rwords[nearby]
+                    break
+        if indexes[i] is None:
+            raise ValueError('Unrecognized word %s' % repr(word))
+
+    # because we don't directly encode the mantissas, we have to extract them
     values = reduce(lambda (last_index, accum), index: (index,
                                                         accum + [(index - last_index) % len(words)]),
                     indexes,
                     (0, []))[1]
     i = sum(mantissa * len(words)**radix for radix, mantissa in enumerate(values))
+    # we don't need to worry about truncating null bytes because of the encoded length on the end
     s = int2bytes(i)
 
     if compact:
