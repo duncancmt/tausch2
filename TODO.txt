@@ -22,6 +22,8 @@ write tests
         *simplex
         duplex
         *KeccakRandom
+        KeccakCipher
+        unpadding
     mnemonic.py
         standard vectors
         random vectors
