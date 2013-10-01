@@ -1,10 +1,11 @@
 import cPickle
+from itertools import izip, count
 from intbytes import int2bytes, bytes2int, encode_varint, decode_varint
 from math import log, floor, ceil
 from keccak import Keccak
 
 words = cPickle.Unpickler(open('words.pkl','rb')).load()
-rwords = dict(enumerate(words))
+rwords = dict(izip(words,count()))
 
 def encode(s, compact=False):
     """From a byte string, produce a list of words that durably encodes the string.
@@ -24,7 +25,7 @@ def encode(s, compact=False):
     checksum_length = max(1, (len(s)-1).bit_length())
     checksum = k.squeeze(checksum_length)
 
-    length = chr(checksum_length) if compact else encode_varint(len(s))
+    length = chr(checksum_length) if compact else encode_varint(len(s), endian='little')
 
     s += checksum
     s += length
@@ -39,7 +40,7 @@ def encode(s, compact=False):
         retval[j] = words[word_index]
         i //= len(words)
     assert i == 0
-    return retval
+    return tuple(retval)
 
 def decode(w, compact=False):
     """From a list of words, or a whitespace-separated string of words, produce
@@ -69,8 +70,8 @@ def decode(w, compact=False):
         consumed = 1
         length = len(s) - checksum_length - consumed
     else:
-        (length, consumed) = decode_varint(s)
-        checksum_length = max(1, (len(s)-1).bit_length())
+        (length, consumed) = decode_varint(s, endian='little')
+        checksum_length = max(1, (length-1).bit_length())
 
     s = s[:-consumed]
     s, checksum = s[:-checksum_length], s[-checksum_length:]
