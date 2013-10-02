@@ -22,7 +22,9 @@ write tests
         *simplex
         duplex
         *KeccakRandom
-        KeccakCipher
+        *KeccakCipher
+            *valid encryption/decryption cycle
+            *changed ciphertext results in mac not checking out
         unpadding
     mnemonic.py
         standard vectors

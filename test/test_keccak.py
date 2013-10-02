@@ -8,7 +8,7 @@ import unittest
 from binascii import hexlify, unhexlify
 
 import keccak
-
+from intbytes import int2bytes, bytes2int
 
 # Base class for Keccak tests
 class KeccakTestCase(unittest.TestCase):
@@ -235,9 +235,68 @@ class KeccakRandomTestSeed(unittest.TestSuite):
 
 
 
+
+########## Tests for KeccakCipher ##########
+lorem = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut quis ipsum odio. Ut ut commodo justo. Morbi non arcu metus. Vestibulum facilisis aliquet nisl placerat consequat. Morbi vitae enim sit amet neque suscipit commodo eget eget libero. Sed aliquet auctor nunc, nec consequat arcu gravida quis. Ut molestie vulputate volutpat. Nunc ut lorem ultricies, hendrerit metus id, rhoncus enim. Integer euismod mattis tincidunt. Donec condimentum, lacus eleifend egestas lobortis, enim mauris congue erat, quis placerat est metus eu massa. Aenean malesuada, odio id tempus pulvinar, erat dui blandit ante, in scelerisque velit leo id mi. Nam faucibus mauris ut eros pulvinar, vitae pellentesque arcu vehicula. Etiam lacinia eros lorem, vitae condimentum felis hendrerit non. Suspendisse urna sem, convallis sed urna quis, congue fringilla quam. Mauris enim orci, sollicitudin eget eros vitae, dictum faucibus mauris. Curabitur feugiat sapien at eros lobortis, eget dictum risus sodales. Maecenas laoreet metus diam, sed cras amet.'
+class KeccakCipherTestCase(unittest.TestCase):
+    longMessage=True
+    def __init__(self, key):
+        self.key = key
+        super(KeccakCipherTestCase, self).__init__()
+    def setUp(self):
+        self.random = keccak.KeccakRandom(self.key)
+    def runTest(self):
+        for i in xrange(1000):
+            ptext_start = self.random.randint(0, len(lorem))
+            ptext_end = self.random.randint(ptext_start, len(lorem))
+            ptext = lorem[ptext_start:ptext_end]
+            nonce = int2bytes(self.random.getrandbits(128), length=128/8)
+
+            ctext = ''
+            c = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=True)
+            chunk_start = 0
+            chunk_end = 0
+            while chunk_start < len(ptext):
+                chunk_start = chunk_end
+                chunk_end = self.random.randint(chunk_start, len(ptext))
+                ctext += c.encrypt(ptext[chunk_start:chunk_end])
+            ctext += c.emit_mac()
+
+            ptext_ = ''
+            d = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=False)
+            chunk_start = 0
+            chunk_end = 0
+            while chunk_start < len(ctext):
+                chunk_start = chunk_end
+                chunk_end = self.random.randint(chunk_start, len(ctext))
+                ptext_ += d.decrypt(ctext[chunk_start:chunk_end])
+            ptext_ += d.verify_mac()
+
+            self.assertEqual(ptext, ptext_,
+                             'Message was not identical after an encryption/decryption round. key: %s, nonce: %s, round %d' \
+                             % (repr(self.key), repr(nonce), i) )
+
+            ptext_ = ''
+            d = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=False)
+            changed_byte = self.random.randint(0, len(ctext)-1)
+            ctext = ctext[:changed_byte] + chr(self.random.randint(1,255) ^ ord(ctext[changed_byte])) + ctext[changed_byte+1:]
+            chunk_start = 0
+            chunk_end = 0
+            while chunk_start < len(ctext):
+                chunk_start = chunk_end
+                chunk_end = self.random.randint(chunk_start, len(ctext))
+                ptext_ += d.decrypt(ctext[chunk_start:chunk_end])
+
+            with self.assertRaises(ValueError):
+                ptext_ += d.verify_mac()
+
+
+
 if __name__ == '__main__':
     keccak_tests = unittest.TestSuite((ns_tests, s_tests, long_tests))
     keccakrandom_tests = unittest.TestSuite(KeccakRandomTestSeed(seed)
                                             for seed in [ '', 'foo', 'bar', 'baz', 'qux', 'quux', 'corge', 'grault', 'garply', 'waldo', 'fred', 'plugh', 'xyzzy', 'thud' ])
-    all_tests = unittest.TestSuite((keccak_tests, keccakrandom_tests))
+    keccakcipher_tests = unittest.TestSuite(KeccakCipherTestCase(key)
+                                            for key in [ '', 'foo', 'bar', 'baz', 'qux', 'quux', 'corge', 'grault', 'garply', 'waldo', 'fred', 'plugh', 'xyzzy', 'thud' ])
+    all_tests = unittest.TestSuite((keccak_tests, keccakrandom_tests, keccakcipher_tests))
     unittest.TextTestRunner(verbosity=2).run(all_tests)
