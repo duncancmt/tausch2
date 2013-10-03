@@ -5,6 +5,7 @@ sys.path.append(os.path.dirname(this_dir))
 
 import cPickle
 import unittest
+import warnings
 from binascii import hexlify, unhexlify
 
 import keccak
@@ -245,6 +246,18 @@ class KeccakCipherTestCase(unittest.TestCase):
         super(KeccakCipherTestCase, self).__init__()
     def setUp(self):
         self.random = keccak.KeccakRandom(self.key)
+    def get_encryption_cipher(self, nonce):
+        with warnings.catch_warnings(record=True) as w:
+            retval = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=True)
+            if len(w) > 0:
+                assert all(map(lambda x: issubclass(w[-1].category, keccak.ShortKeyWarning), w))
+        return retval
+    def get_decryption_cipher(self, nonce):
+        with warnings.catch_warnings(record=True) as w:
+            retval = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=False)
+            if len(w) > 0:
+                assert all(map(lambda x: issubclass(w[-1].category, keccak.ShortKeyWarning), w))
+        return retval
     def runTest(self):
         for i in xrange(1000):
             ptext_start = self.random.randint(0, len(lorem))
@@ -253,7 +266,7 @@ class KeccakCipherTestCase(unittest.TestCase):
             nonce = int2bytes(self.random.getrandbits(128), length=128/8)
 
             ctext = ''
-            c = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=True)
+            c = self.get_encryption_cipher(nonce)
             chunk_start = 0
             chunk_end = 0
             while chunk_start < len(ptext):
@@ -263,7 +276,7 @@ class KeccakCipherTestCase(unittest.TestCase):
             ctext += c.emit_mac()
 
             ptext_ = ''
-            d = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=False)
+            d = self.get_decryption_cipher(nonce)
             chunk_start = 0
             chunk_end = 0
             while chunk_start < len(ctext):
@@ -277,7 +290,7 @@ class KeccakCipherTestCase(unittest.TestCase):
                              % (repr(self.key), repr(nonce), i) )
 
             ptext_ = ''
-            d = keccak.KeccakCipher(self.key, nonce, encrypt_not_decrypt=False)
+            d = self.get_decryption_cipher(nonce)
             changed_byte = self.random.randint(0, len(ctext)-1)
             ctext = ctext[:changed_byte] + chr(self.random.randint(1,255) ^ ord(ctext[changed_byte])) + ctext[changed_byte+1:]
             chunk_start = 0

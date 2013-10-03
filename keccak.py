@@ -18,6 +18,7 @@
 # project
 
 import operator
+import warnings
 from math import ceil
 from binascii import hexlify
 from copy import copy, deepcopy
@@ -41,7 +42,6 @@ except (ImportError, AttributeError, KeccakError):
         del _sha3
     except NameError:
         pass
-    import warnings
     warnings.warn('Having the _sha3 module from pysha3 makes this module much faster')
     has_fast = False
 
@@ -534,7 +534,6 @@ class Keccak(object):
 try:
     from correct_random import CorrectRandom as random_base
 except ImportError:
-    import warnings
     warnings.warn("Not having correct_random.CorrectRandom makes some of KeccakRandom's methods produce biased output")
     from random import Random as random_base
 class KeccakRandom(random_base):
@@ -597,6 +596,10 @@ class KeccakRandom(random_base):
         self._cache = 0L
         self._cache_len = 0L
 
+
+
+class ShortKeyWarning(RuntimeWarning):
+    pass
 class KeccakCipher(object):
     """Implements an authenticated symmetric encryption mode based on duplex Keccak"""
     def __init__(self, key, nonce, encrypt_not_decrypt=True, keccak_args=dict()):
@@ -620,11 +623,9 @@ class KeccakCipher(object):
         if not isinstance(nonce, bytes):
             raise TypeError("nonce must be a bytes")
         if len(key) < self.k.c // 8:
-            import warnings
-            warnings.warn('Key is shorter than the capacity of the cipher. The use of a short key weakens the cipher.')
+            warnings.warn(ShortKeyWarning('Key is shorter than the capacity of the cipher. The use of a short key weakens the cipher.'))
         if len(nonce) < self.k.c // 8:
-            import warnings
-            warnings.warn('Nonce is shorter than the capacity of the cipher. The use of a short nonce weakens the cipher.')
+            warnings.warn(ShortKeyWarning('Nonce is shorter than the capacity of the cipher. The use of a short nonce weakens the cipher.'))
 
         self.input_cache = ''
         self.mac_size = self.k.r//8
