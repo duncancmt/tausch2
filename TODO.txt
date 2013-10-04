@@ -5,13 +5,12 @@ write tests
         *decryption
         *decoding and encoding of byte streams
         handling of *DamgaardJurikPlaintext and DamgaardJurikCiphertext classes
-        homomophisms
+        *homomophisms
             *addition
             *subtraction
             *multiplication
             *division
-            negation
-            comparison
+            *negation
         pickling and state storage
         deterministic initialization
         timing

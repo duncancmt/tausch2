@@ -106,6 +106,13 @@ class CiphertextTest(SimpleCiphertextTest):
                              'With bit_len=%d, seed=%s, \'dividing\' the ciphertext by a constant did not result in the plaintext being divided by the same constant' \
                                % (self.bit_len, repr(self.seed)))
 
+            pt = -self.random.getrandbits(self.bit_len)
+            pt = DamgaardJurikPlaintext(pt)
+            ct = self.dj.encrypt(pt, random=self.random)
+            self.assertEqual(self.dj.decrypt(-ct), -pt,
+                             'With bit_len=%d, seed=%s, \'negation\' of the ciphertext did not result in the negation of the plaintext' \
+                               % (self.bit_len, repr(self.seed)))
+
 
 class SimpleEncryptDecryptTest(KeygenTest):
     longMessage=True
