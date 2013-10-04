@@ -88,6 +88,22 @@ class EncryptVectorTest(unittest.TestCase):
                          'With keylen=%d, seed=%s, encryption did not match expected output' \
                            % (self.keylen, repr(self.seed)))
 
+class DecryptVectorTest(unittest.TestCase):
+    longMessage = True
+    def __init__(self, keylen, seed, input, *args, **kwargs):
+        self.keylen = keylen
+        self.seed = seed
+        self.input = input
+        super(DecryptVectorTest, self).__init__(*args, **kwargs)
+    def setUp(self):
+        self.random = keccak.KeccakRandom(self.seed)
+        self.dj = DamgaardJurik(keylen=self.keylen+1, random=self.random)
+    def runTest(self):
+        plain = DamgaardJurikPlaintext(self.random.getrandbits(self.keylen))
+        self.assertEqual(self.dj.decrypt(self.input), plain,
+                         'With keylen=%d, seed=%s, decryption did not match expected output' \
+                           % (self.keylen, repr(self.seed)))
+
 if __name__ == '__main__':
     keylengths = [512, 768, 1024, 2048, 4096]
     keygen_tests = unittest.TestSuite(map(lambda keylen: KeygenTest(keylen, 10), keylengths))
@@ -107,9 +123,12 @@ if __name__ == '__main__':
     #         data[keylen][seed] = dj.encrypt(plain, random=random)
     #         data[keylen][seed].c = int(data[keylen][seed].c)
     #         data[keylen][seed].ns1 = int(data[keylen][seed].ns1)
+    test_vectors = cPickle.Unpickler(open('dj_encryptions.pkl','rb')).load()
     encryption_tests = unittest.TestSuite(EncryptVectorTest(keylen, seed, output)
-                                          for keylen, temp in cPickle.Unpickler(open('dj_encryptions.pkl','rb')).load().iteritems()
+                                          for keylen, temp in test_vectors.iteritems()
                                           for seed, output in temp.iteritems())
-    
-    all_tests = unittest.TestSuite([keygen_tests, plaintext_tests, simple_tests, encryption_tests])
+    decryption_tests = unittest.TestSuite(DecryptVectorTest(keylen, seed, output)
+                                          for keylen, temp in test_vectors.iteritems()
+                                          for seed, output in temp.iteritems())
+    all_tests = unittest.TestSuite([keygen_tests, plaintext_tests, simple_tests, encryption_tests, decryption_tests])
     unittest.TextTestRunner(verbosity=2).run(all_tests)

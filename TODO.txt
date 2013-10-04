@@ -2,7 +2,7 @@ write tests
     damgaardjurik.py
         *key generation
         *encryption
-        decryption
+        *decryption
         *decoding and encoding of byte streams
         handling of *DamgaardJurikPlaintext and DamgaardJurikCiphertext classes
         homomophisms
