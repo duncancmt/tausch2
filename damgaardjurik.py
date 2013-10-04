@@ -118,7 +118,7 @@ class DamgaardJurik(object):
         ns1 = ns*self.n
 
         # generate the random parameter r
-        r = random.randrange(1,ns1)
+        r = random.randint(1, ns1-1)
 
         # perform the encryption
         c = pow((1+self.n), i, ns1)
