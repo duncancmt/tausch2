@@ -2,7 +2,6 @@ import random
 from math import ceil, floor, log
 from fractions import gcd
 from numbers import Integral
-from itertools import izip_longest
 from copy import deepcopy
 from primes import gen_prime
 from intbytes import int2bytes, bytes2int
@@ -20,12 +19,6 @@ except ImportError:
         import warnings
         warnings.warn('Not having gmpy2 or gmpy makes this at least 10x slower')
         has_gmpy = False
-
-def grouper(iterable, n, fillvalue=None):
-    "Collect data into fixed-length chunks or blocks"
-    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
-    args = [iter(iterable)] * n
-    return izip_longest(fillvalue=fillvalue, *args)
 
 def lcm(a,b):
     """Return the least common multiple (LCM) of the arguments"""
@@ -224,36 +217,37 @@ class DamgaardJurikPlaintext(long):
         return retval[:-1]
 class DamgaardJurikCiphertext(Integral):
     """Class representing the ciphertext in Damgaard-Jurik. Also represents the homomorphisms of Damgaard-Jurik"""
-    def __init__(self, c, ns1, cache_powers=True, cache_chunks=5):
+    def __init__(self, c, ns1, cache=True, bucket_size=5):
         """Constructor:
 
         c: the ciphertext, represented as an integer type
         ns1: the exponentiated modulus used in generating this ciphertext
-        cache_powers: (optional) if True, we cache the powers of the ciphertext that are powers of two
-            this speeds up the square-and-multiply exponentiation used if lots of homomorphic manipulation
-            takes place, the default is True
-        cache_chunks: (optional) only has an effect if cache_powers=True, number of bits per bucket in the
-            cache of powers, default 5
+        cache: (optional) if True, we cache the powers of the ciphertext
+            this speeds up the square-and-multiply exponentiation used if
+            lots of homomorphic manipulation takes place, the default is True
+        bucket_size: (optional) only has an effect if cache=True, number of bits
+            per bucket in the cache of powers, default 5
         """
         self.c = c
         self.ns1 = ns1
         if has_gmpy:
             self.c = mpz(self.c)
             self.ns1 = mpz(self.ns1)
-        self.cache_powers = cache_powers
-        if cache_chunks > 8:
+        if bucket_size > 8:
             import warnings
-            warnings.warn("Setting cache_chunks > 8 allows timing attacks based on Python's handling of small integers")
-        self.cache_chunks = cache_chunks
-        self.cache = None
+            warnings.warn("Setting bucket_size > 8 allows timing attacks based on Python's handling of small integers")
+        self.bucket_size = bucket_size
+        if cache:
+            self.cache = [ [ None
+                             for _ in xrange((2**self.bucket_size)) ]
+                           for __ in xrange(int(ceil(self.ns1.bit_length()/float(self.bucket_size)))) ]
+        else:
+            self.cache = None
 
     def populate_cache(self):
-        if not self.cache_powers:
-            raise RuntimeError("Tried to populate the cache of a DamgaardJurikCiphertext instance without a cache")
         if self.cache is None:
-            self.cache = [ [ None
-                             for _ in xrange((2**self.cache_chunks)) ]
-                           for __ in xrange(int(ceil(self.ns1.bit_length()/float(self.cache_chunks)))) ]
+            raise RuntimeError("Tried to populate the cache of a DamgaardJurikCiphertext instance without a cache")
+        elif self.cache[0][1] is None:
             self.cache[0][1] = self.c
             base = self.c
             for i, bucket in enumerate(self.cache):
@@ -262,18 +256,19 @@ class DamgaardJurikCiphertext(Integral):
                     bucket[1] *= base
                     bucket[1] %= self.ns1
                 base = bucket[1]
-                # assert base == pow(self.c, 2**(self.cache_chunks*i), self.ns1)
+                # assert base == pow(self.c, 2**(self.bucket_size*i), self.ns1)
                 for j in xrange(2,len(bucket)):
                     bucket[j] = bucket[j-1]
                     bucket[j] *= base
                     bucket[j] %= self.ns1
-                    # assert bucket[j] % self.ns1 == pow(self.c, 2**(self.cache_chunks*i)*j, self.ns1)
+                    # assert bucket[j] % self.ns1 == pow(self.c, 2**(self.bucket_size*i)*j, self.ns1)
 
     def wrap(self, other):
-        return type(self)(other, self.ns1, self.cache_powers, self.cache_chunks)
+        return type(self)(other, self.ns1, self.cache is not None, self.bucket_size)
 
     def __repr__(self):
-        return 'DamgaardJurikCiphertext(%d, %d, cache_powers=%s, cache_chunks=%d)' % (int(self.c), int(self.ns1), self.cache_powers, self.cache_chunks)
+        return 'DamgaardJurikCiphertext(%d, %d, cache=%s, bucket_size=%d)' \
+               % (int(self.c), int(self.ns1), self.cache is not None, self.bucket_size)
     def __str__(self):
         return int2bytes(self.c)
 
@@ -309,13 +304,14 @@ class DamgaardJurikCiphertext(Integral):
         if isinstance(other, DamgaardJurikCiphertext):
             raise TypeError("It is nonsense to try to multiply ciphertexts. You can only multiply ciphertexts by normal integers")
         other %= self.ns1
-        if self.cache_powers:
+        if self.cache is None:
+            return self.wrap(pow(self.c, other, self.ns1))
+        else:
             self.populate_cache()
             retval = 1
             garbage = 1
-            # TODO: rewrite this to not cast integers to strings of '1' and '0'
-            for i, b in enumerate(grouper(reversed(bin(other)[2:]), self.cache_chunks, fillvalue='0')):
-                b = int(''.join(reversed(b)), 2)
+            for i, b in ( (i, (other >> (i * self.bucket_size)) & ((1 << self.bucket_size) - 1))
+                          for i in xrange(int(ceil(other.bit_length() / float(self.bucket_size)))) ):
                 j = random.randrange(1,len(self.cache[i])) # TODO: use a better random generator
                 if b == 0:
                     garbage *= self.cache[i][j]
@@ -325,8 +321,7 @@ class DamgaardJurikCiphertext(Integral):
                     retval %= self.ns1
                 garbage = deepcopy(retval)
             return self.wrap(retval)
-        else:
-            return self.wrap(pow(self.c, other, self.ns1))
+
     def __rmul__(self, other):
         return self * other
 
