@@ -360,30 +360,21 @@ class DamgaardJurikCiphertext(Integral):
         else:
             return self.c < other
     def __le__(self, other):
-        if isinstance(other, DamgaardJurikCiphertext):
-            return self.c <= other.c
-        else:
-            return self.c <= other
+        return not self > other
     def __eq__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
             return self.c == other.c
         else:
             return self.c == other
     def __ne__(self, other):
-        if isinstance(other, DamgaardJurikCiphertext):
-            return self.c != other.c
-        else:
-            return self.c != other
+        return not self == other
     def __gt__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
             return self.c > other.c
         else:
             return self.c > other
     def __ge__(self, other):
-        if isinstance(other, DamgaardJurikCiphertext):
-            return self.c >= other.c
-        else:
-            return self.c >= other
+        return not self < other
 
     def __int__(self):
         return int(self.c)
