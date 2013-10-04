@@ -2,6 +2,8 @@ import random
 from math import ceil, floor, log
 from fractions import gcd
 from numbers import Integral
+from itertools import izip_longest
+from copy import deepcopy
 from primes import gen_prime
 from intbytes import int2bytes, bytes2int
 
@@ -18,6 +20,12 @@ except ImportError:
         import warnings
         warnings.warn('Not having gmpy2 or gmpy makes this at least 10x slower')
         has_gmpy = False
+
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
+    args = [iter(iterable)] * n
+    return izip_longest(fillvalue=fillvalue, *args)
 
 def lcm(a,b):
     """Return the least common multiple (LCM) of the arguments"""
@@ -117,7 +125,7 @@ class DamgaardJurik(object):
         ns1 = ns*self.n
 
         # generate the random parameter r
-        r = random.randint(0, ns1-1)
+        r = random.randrange(1,ns1)
 
         # perform the encryption
         c = pow((1+self.n), i, ns1)
@@ -208,7 +216,7 @@ class DamgaardJurikPlaintext(long):
         else:
             return super(DamgaardJurikPlaintext, cls).__new__(cls, n)
     def __repr__(self):
-        return 'DamgaardJurikPlaintext(%s)' % str(self)
+        return 'DamgaardJurikPlaintext(%s)' % repr(int(self))
     def __str__(self):
         retval = int2bytes(self)
         if retval[-1] != '\x01':
@@ -216,7 +224,7 @@ class DamgaardJurikPlaintext(long):
         return retval[:-1]
 class DamgaardJurikCiphertext(Integral):
     """Class representing the ciphertext in Damgaard-Jurik. Also represents the homomorphisms of Damgaard-Jurik"""
-    def __init__(self, c, ns1, cache_powers=True):
+    def __init__(self, c, ns1, cache_powers=True, cache_chunks=5):
         """Constructor:
 
         c: the ciphertext, represented as an integer type
@@ -224,14 +232,48 @@ class DamgaardJurikCiphertext(Integral):
         cache_powers: (optional) if True, we cache the powers of the ciphertext that are powers of two
             this speeds up the square-and-multiply exponentiation used if lots of homomorphic manipulation
             takes place, the default is True
+        cache_chunks: (optional) only has an effect if cache_powers=True, number of bits per bucket in the
+            cache of powers, default 5
         """
         self.c = c
         self.ns1 = ns1
+        if has_gmpy:
+            self.c = mpz(self.c)
+            self.ns1 = mpz(self.ns1)
         self.cache_powers = cache_powers
+        if cache_chunks > 8:
+            import warnings
+            warnings.warn("Setting cache_chunks > 8 allows timing attacks based on Python's handling of small integers")
+        self.cache_chunks = cache_chunks
         self.cache = None
 
+    def populate_cache(self):
+        if not self.cache_powers:
+            raise RuntimeError("Tried to populate the cache of a DamgaardJurikCiphertext instance without a cache")
+        if self.cache is None:
+            self.cache = [ [ None
+                             for _ in xrange((2**self.cache_chunks)) ]
+                           for __ in xrange(int(ceil(self.ns1.bit_length()/float(self.cache_chunks)))) ]
+            self.cache[0][1] = self.c
+            base = self.c
+            for i, bucket in enumerate(self.cache):
+                if i != 0:
+                    bucket[1] = self.cache[i-1][-1]
+                    bucket[1] *= base
+                    bucket[1] %= self.ns1
+                base = bucket[1]
+                # assert base == pow(self.c, 2**(self.cache_chunks*i), self.ns1)
+                for j in xrange(2,len(bucket)):
+                    bucket[j] = bucket[j-1]
+                    bucket[j] *= base
+                    bucket[j] %= self.ns1
+                    # assert bucket[j] % self.ns1 == pow(self.c, 2**(self.cache_chunks*i)*j, self.ns1)
+
+    def wrap(self, other):
+        return type(self)(other, self.ns1, self.cache_powers, self.cache_chunks)
+
     def __repr__(self):
-        return 'DamgaardJurikCiphertext(%d, %d, cache_powers=%s)' % (self.c, self.ns1, self.cache_powers)
+        return 'DamgaardJurikCiphertext(%d, %d, cache_powers=%s, cache_chunks=%d)' % (int(self.c), int(self.ns1), self.cache_powers, self.cache_chunks)
     def __str__(self):
         return int2bytes(self.c)
 
@@ -239,10 +281,10 @@ class DamgaardJurikCiphertext(Integral):
         if isinstance(other, DamgaardJurikCiphertext):
             if self.ns1 != other.ns1:
                 raise ValueError('Cannot add ciphertexts that belong to different keys')
-            return type(self)(self.c * other.c % self.ns1, self.ns1, self.cache_powers)
+            return self.wrap(self.c * other.c % self.ns1)
         else:
             # other is a int or long
-            return type(self)(self.c * other % self.ns1, self.ns1, self.cache_powers)
+            return self.wrap(self.c * other % self.ns1)
     def __radd__(self, other):
         return self + other
 
@@ -250,70 +292,71 @@ class DamgaardJurikCiphertext(Integral):
         if isinstance(other, DamgaardJurikCiphertext):
             if self.ns1 != other.ns1:
                 raise ValueError('Cannot subtract ciphertexts that belong to different keys')
-            return type(self)(self.c * invert(other.c, self.ns1) % self.ns1, self.ns1, self.cache_powers)
+            return self.wrap(self.c * invert(other.c, self.ns1) % self.ns1)
         else:
             # other is a int or long
-            return type(self)(self.c * invert(other, self.ns1) % self.ns1, self.ns1, self.cache_powers)
+            return self.wrap(self.c * invert(other, self.ns1) % self.ns1)
     def __rsub__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
             if self.ns1 != other.ns1:
                 raise ValueError('Cannot subtract ciphertexts that belong to different keys')
-            return type(self)(other.c * invert(self.c, self.ns1) % self.ns1, self.ns1, self.cache_powers)
+            return self.wrap(other.c * invert(self.c, self.ns1) % self.ns1)
         else:
             # other is a int or long
-            return type(self)(other * invert(self.c, self.ns1) % self.ns1, self.ns1, self.cache_powers)
+            return self.wrap(other * invert(self.c, self.ns1) % self.ns1)
         
     def __mul__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
-            other = other.c
+            raise TypeError("It is nonsense to try to multiply ciphertexts. You can only multiply ciphertexts by normal integers")
         other %= self.ns1
         if self.cache_powers:
-            if self.cache is None:
-                self.cache = [None]*self.ns1.bit_length()
-                self.cache[0] = self.c
-                for i in xrange(1, len(self.cache)):
-                    self.cache[i] = self.cache[i-1]**2
-
+            self.populate_cache()
             retval = 1
             garbage = 1
-            for i, b in enumerate(reversed(bin(other)[2:])):
-                if b == '1':
-                    retval *= self.cache[i]
-                    retval %= self.ns1
-                else:
-                    garbage *= self.cache[i]
+            # TODO: rewrite this to not cast integers to strings of '1' and '0'
+            for i, b in enumerate(grouper(reversed(bin(other)[2:]), self.cache_chunks, fillvalue='0')):
+                b = int(''.join(reversed(b)), 2)
+                j = random.randrange(1,len(self.cache[i])) # TODO: use a better random generator
+                if b == 0:
+                    garbage *= self.cache[i][j]
                     garbage %= self.ns1
-                garbage = retval
-            return type(self)(retval, self.ns1, self.cache_powers)
+                if b != 0:
+                    retval *= self.cache[i][b]
+                    retval %= self.ns1
+                garbage = deepcopy(retval)
+            return self.wrap(retval)
         else:
-            return type(self)(pow(self.c, other, self.ns1), self.ns1, self.cache_powers)
+            return self.wrap(pow(self.c, other, self.ns1))
     def __rmul__(self, other):
         return self * other
 
     def __div__(self, other):
-        raise NotImplementedError
-    def __floordiv__(self, other):
-        raise NotImplementedError
+        if isinstance(other, DamgaardJurikCiphertext):
+            raise TypeError("It is nonsense to try to divide ciphertexts. You can only divide ciphertexts by normal integers")
+        return self * invert(other, self.ns1)
     def __truediv__(self, other):
+        return self.__div__(other)
+    def __rdiv__(self, other):
         raise NotImplementedError
+    def __rtruediv__(self, other):
+        raise NotImplementedError
+
     def __mod__(self, other):
         raise NotImplementedError
     def __divmod__(self, other):
         raise NotImplementedError
-    def __rdiv__(self, other):
-        raise NotImplementedError
-    def __rfloordiv__(self, other):
-        raise NotImplementedError
-    def __rtruediv__(self, other):
+    def __floordiv__(self, other):
         raise NotImplementedError
     def __rmod__(self, other):
         raise NotImplementedError
     def __rdivmod__(self, other):
         raise NotImplementedError
+    def __rfloordiv__(self, other):
+        raise NotImplementedError
 
-    def __neg__(self, other):
-        return type(self)(invert(self.c, self.ns1), self.ns1, self.cache_powers)
-    def __pos__(self, other):
+    def __neg__(self):
+        return self.wrap(invert(self.c, self.ns1))
+    def __pos__(self):
         return self
 
     def __lt__(self, other):
