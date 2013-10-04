@@ -6,10 +6,10 @@ write tests
         *decoding and encoding of byte streams
         handling of *DamgaardJurikPlaintext and DamgaardJurikCiphertext classes
         homomophisms
-            addition
-            subtraction
-            multiplication
-            division
+            *addition
+            *subtraction
+            *multiplication
+            *division
             negation
             comparison
         pickling and state storage
