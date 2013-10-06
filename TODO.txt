@@ -6,14 +6,22 @@ write tests
         *decoding and encoding of byte streams
         *handling of *DamgaardJurikPlaintext and *DamgaardJurikCiphertext classes
         *homomophisms
-            *addition
-            *subtraction
-            *multiplication
-            *division
-            *negation
+            casting
+            addition
+                *__add__
+                __radd__
+            subtraction
+                *__sub__
+                __rsub__
+            multiplication
+                *__mul__
+                __rmul__
+            division
+                *__div__
+                __truediv__
+            negation
+                *__neg__
         pickling and state storage
-        deterministic initialization
-        timing
     intbytes.py
         standard vectors (empty vectors, zero int)
         random vectors
