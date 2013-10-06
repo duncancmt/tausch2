@@ -126,7 +126,7 @@ class DamgaardJurik(object):
         c %= ns1
 
         # format the ciphertext as DamgaardJurikCiphertext
-        return DamgaardJurikCiphertext(c, ns1)
+        return DamgaardJurikCiphertext(c, self)
 
     def decrypt(self, message):
         """Decrypt and encrypted message. Only works if this instance has a private key available.
@@ -217,7 +217,7 @@ class DamgaardJurikPlaintext(long):
         return retval[:-1]
 class DamgaardJurikCiphertext(Integral):
     """Class representing the ciphertext in Damgaard-Jurik. Also represents the homomorphisms of Damgaard-Jurik"""
-    def __init__(self, c, ns1, cache=True, bucket_size=5):
+    def __init__(self, c, key, cache=True, bucket_size=5):
         """Constructor:
 
         c: the ciphertext, represented as an integer type
@@ -228,8 +228,12 @@ class DamgaardJurikCiphertext(Integral):
         bucket_size: (optional) only has an effect if cache=True, number of bits
             per bucket in the cache of powers, default 5
         """
+        if not isinstance(key, DamgaardJurik):
+            raise TypeError('Expected argument key to be a DamgaardJurik instance')
         self.c = c
-        self.ns1 = ns1
+        self.key = key
+        self.s = int(ceil(log(int(c), int(key.n)) - 1))
+        self.ns1 = self.key.n ** (self.s + 1)
         if has_gmpy:
             self.c = mpz(self.c)
             self.ns1 = mpz(self.ns1)
@@ -264,41 +268,48 @@ class DamgaardJurikCiphertext(Integral):
                     # assert bucket[j] % self.ns1 == pow(self.c, 2**(self.bucket_size*i)*j, self.ns1)
 
     def wrap(self, other):
-        return type(self)(other, self.ns1, self.cache is not None, self.bucket_size)
+        return type(self)(other, self.key, self.cache is not None, self.bucket_size)
+    def convert(self, i):
+        # it doesn't matter that r is chosen using a bad RNG because it will
+        # be combined with our r that is chosen using a good RNG
+        return self.key.encrypt(DamgaardJurikPlaintext(i), s=self.s)
 
     def __repr__(self):
-        return 'DamgaardJurikCiphertext(%d, %d, cache=%s, bucket_size=%d)' \
-               % (int(self.c), int(self.ns1), self.cache is not None, self.bucket_size)
+        return 'DamgaardJurikCiphertext(%d, %s, cache=%s, bucket_size=%d)' \
+               % (int(self.c), repr(self.key), self.cache is not None, self.bucket_size)
     def __str__(self):
         return int2bytes(self.c)
 
     def __add__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
-            if self.ns1 != other.ns1:
+            if self.key is not other.key or self.ns1 != other.ns1:
                 raise ValueError('Cannot add ciphertexts that belong to different keys')
             return self.wrap(self.c * other.c % self.ns1)
         else:
             # other is a int or long
-            return self.wrap(self.c * other % self.ns1)
+            other = self.convert(other)
+            return self + other
     def __radd__(self, other):
         return self + other
 
     def __sub__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
-            if self.ns1 != other.ns1:
+            if self.key is not other.key or self.ns1 != other.ns1:
                 raise ValueError('Cannot subtract ciphertexts that belong to different keys')
             return self.wrap(self.c * invert(other.c, self.ns1) % self.ns1)
         else:
             # other is a int or long
-            return self.wrap(self.c * invert(other, self.ns1) % self.ns1)
+            other = self.convert(other)
+            return self - other
     def __rsub__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
-            if self.ns1 != other.ns1:
+            if self.key is not other.key or self.ns1 != other.ns1:
                 raise ValueError('Cannot subtract ciphertexts that belong to different keys')
             return self.wrap(other.c * invert(self.c, self.ns1) % self.ns1)
         else:
             # other is a int or long
-            return self.wrap(other * invert(self.c, self.ns1) % self.ns1)
+            other = self.convert(other)
+            return other - self
         
     def __mul__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
@@ -321,7 +332,6 @@ class DamgaardJurikCiphertext(Integral):
                     retval %= self.ns1
                 garbage = deepcopy(retval)
             return self.wrap(retval)
-
     def __rmul__(self, other):
         return self * other
 
