@@ -63,24 +63,23 @@ class DamgaardJurik(object):
         if _state is not None:
             # initialize self from given state
             (self.n, self.l) = _state
-            self.keylen = self.n.bit_length()
             if has_gmpy:
                 self.n = mpz(self.n)
                 if self.l is not None:
                     self.l = mpz(self.l)
         else:
             # generate key and initialize self
-            assert keylen is not None
-            self.keylen = keylen
-            self.generate(random)
+            if keylen is None:
+                raise TypeError('You must specify the keylength when initializing a DamgaardJurik instance')
+            self.generate(keylen, random=random)
 
-    def generate(self, random=random):
+    def generate(self, keylen, random=random):
         """Generate a keypair and initialize this instance with it
 
         random: (optional) a source of entropy for key generation, the default is python's random
         """
-        p = gen_prime(int(floor(self.keylen / 2.0 + 1)), random=random)
-        q = gen_prime(int(ceil(self.keylen / 2.0)), random=random)
+        p = gen_prime(int(floor(keylen / 2.0 + 1)), random=random)
+        q = gen_prime(int(ceil(keylen / 2.0)), random=random)
 
         self.n = p * q
         if has_gmpy:
@@ -181,6 +180,9 @@ class DamgaardJurik(object):
         # format the plaintext to match the type of the ciphertext
         return DamgaardJurikPlaintext(i)
 
+    @property
+    def keylen(self):
+        return self.n.bit_length()
     @property
     def pubkey(self):
         return int(self.n)
