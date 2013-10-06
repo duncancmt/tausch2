@@ -29,6 +29,9 @@ class KeygenTest(unittest.TestCase):
                                                   % (self.keylen, repr(self.seed)))
                 self.assertLess(highbits, 4, 'With keylen=%d, seed=%s, only one extra bit is allowed to be set' \
                                                % (self.keylen, repr(self.seed)))
+                self.assertEqual(dj, cPickle.loads(cPickle.dumps(dj)),
+                                 'With keylen=%d, seed=%s, key was not equal after pickling and unpickling' \
+                                   % (self.keylen, repr(self.seed)))
 
 class PlaintextTest(unittest.TestCase):
     longMessage=True
@@ -57,6 +60,10 @@ class PlaintextTest(unittest.TestCase):
                              'With bit_len=%d, seed=%s, plaintext objects were not equal from str' \
                                % (self.bit_len, repr(self.seed)))
 
+            self.assertEqual(pt, cPickle.loads(cPickle.dumps(pt)),
+                             'With bit_len=%d, seed=%s, plaintext objects were not equal after pickling and unpickling' \
+                               % (self.bit_len, repr(self.seed)))
+
 class SimpleCiphertextTest(PlaintextTest):
     def setUp(self):
         super(SimpleCiphertextTest, self).setUp()
@@ -69,6 +76,12 @@ class SimpleCiphertextTest(PlaintextTest):
                                            % (self.bit_len, repr(self.seed)))
             self.assertEqual(ct, DamgaardJurikCiphertext(int(ct), self.dj),
                              'With bit_len=%d, seed=%s, ciphertext objects were not equal from int' \
+                               % (self.bit_len, repr(self.seed)))
+            self.assertEqual(ct, DamgaardJurikCiphertext(str(ct), self.dj),
+                             'With bit_len=%d, seed=%s, ciphertext objects were not equal from str' \
+                               % (self.bit_len, repr(self.seed)))
+            self.assertEqual(ct, cPickle.loads(cPickle.dumps(ct)),
+                             'With bit_len=%d, seed=%s, ciphertext objects were not equal after pickling and unpickling' \
                                % (self.bit_len, repr(self.seed)))
 
 class CiphertextTest(SimpleCiphertextTest):

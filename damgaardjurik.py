@@ -202,6 +202,11 @@ class DamgaardJurik(object):
     def __setstate__(self, state):
         self.__init__(_state=state)
 
+    def __eq__(self, other):
+        return self.n == other.n and self.l == other.l
+    def __ne__(self, other):
+        return self.n != other.n or self.l != other.l
+
 class DamgaardJurikPlaintext(long):
     """Class representing the plaintext in Damgaard-Jurik"""
     def __new__(cls, n):
@@ -230,11 +235,18 @@ class DamgaardJurikCiphertext(Integral):
         bucket_size: (optional) only has an effect if cache=True, number of bits
             per bucket in the cache of powers, default 5
         """
+        if isinstance(c, (Integral, mpz_type)):
+            self.c = c
+        elif isinstance(c, bytes):
+            self.c = bytes2int(c)
+        else:
+            raise TypeError('Expected argument c to be an integer')
+
         if not isinstance(key, DamgaardJurik):
             raise TypeError('Expected argument key to be a DamgaardJurik instance')
-        self.c = c
         self.key = key
-        self.s = int(ceil(log(int(c), int(key.n)) - 1))
+
+        self.s = int(ceil(log(int(self.c), int(self.key.n)) - 1))
         self.ns1 = self.key.n ** (self.s + 1)
         if has_gmpy:
             self.c = mpz(self.c)

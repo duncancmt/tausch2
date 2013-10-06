@@ -1,5 +1,5 @@
 write tests
-    damgaardjurik.py
+    *damgaardjurik.py
         *key generation
         *encryption
         *decryption
@@ -21,7 +21,7 @@ write tests
                 *__truediv__
             *negation
                 *__neg__
-        pickling and state storage
+        *pickling and state storage
     intbytes.py
         standard vectors (empty vectors, zero int)
         random vectors
