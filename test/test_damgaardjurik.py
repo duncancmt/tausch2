@@ -58,23 +58,29 @@ class PlaintextTest(unittest.TestCase):
                                % (self.bit_len, repr(self.seed)))
 
 class SimpleCiphertextTest(PlaintextTest):
-    def runTest(self):
-        for _ in xrange(self.count):
-            ns1 = self.random.getrandbits(self.bit_len * 2)
-            i = self.random.randint(1, ns1-1)
-            ct = DamgaardJurikCiphertext(i,ns1)
-            self.assertEqual(i, int(ct), 'With bit_len=%d, seed=%s, ciphertext object did not become the same int' \
-                                           % (self.bit_len, repr(self.seed)))
-            self.assertEqual(ct, DamgaardJurikCiphertext(deepcopy(i),deepcopy(ns1)),
-                             'With bit_len=%d, seed=%s, ciphertext objects were not equal from int' \
-                               % (self.bit_len, repr(self.seed)))
-
-class CiphertextTest(SimpleCiphertextTest):
     def setUp(self):
         super(SimpleCiphertextTest, self).setUp()
         self.dj = DamgaardJurik(keylen=self.bit_len+1, random=self.random)
     def runTest(self):
         for _ in xrange(self.count):
+            pt = DamgaardJurikPlaintext(self.random.randint(0, self.dj.n - 1))
+            ct = self.dj.encrypt(pt, random=self.random)
+            self.assertEqual(ct, int(ct), 'With bit_len=%d, seed=%s, ciphertext object did not become the same int' \
+                                           % (self.bit_len, repr(self.seed)))
+            self.assertEqual(ct, DamgaardJurikCiphertext(int(ct), self.dj),
+                             'With bit_len=%d, seed=%s, ciphertext objects were not equal from int' \
+                               % (self.bit_len, repr(self.seed)))
+
+class CiphertextTest(SimpleCiphertextTest):
+    def runTest(self):
+        for _ in xrange(self.count):
+            p_neg = DamgaardJurikPlaintext(-self.random.getrandbits(self.bit_len))
+            c_neg = self.dj.encrypt(p_neg, random=self.random)
+            self.assertEqual(self.dj.decrypt(-c_neg), -p_neg,
+                             'With bit_len=%d, seed=%s, \'negation\' of the ciphertext did not result in the negation of the plaintext' \
+                               % (self.bit_len, repr(self.seed)))
+
+            # TODO: test for s>1
             p_increment = self.random.getrandbits(32)
             p_decrement = self.random.randrange(32)
             p_multiplier = self.random.getrandbits(32)
@@ -92,26 +98,47 @@ class CiphertextTest(SimpleCiphertextTest):
             self.assertEqual(self.dj.decrypt(ct + c_increment), pt + p_increment,
                              'With bit_len=%d, seed=%s, \'adding\' ciphertexts did not decrypt to the sum of their plaintexts' \
                                % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(c_increment + ct), p_increment + pt,
+                             'With bit_len=%d, seed=%s, \'adding\' ciphertexts in reverse order did not decrypt to the sum of their plaintexts' \
+                               % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(ct + p_increment), pt + p_increment,
+                             'With bit_len=%d, seed=%s, \'adding\' an integer to a ciphertext did not decrypt to the sum of the plaintext and the integer' \
+                               % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(p_increment + ct), p_increment + pt,
+                             'With bit_len=%d, seed=%s, \'adding\' a ciphertext to an integer did not decrypt to the sum of the plaintext and the integer' \
+                               % (self.bit_len, repr(self.seed)))
 
             c_decrement = self.dj.encrypt(DamgaardJurikPlaintext(p_decrement), random=self.random)
             self.assertEqual(self.dj.decrypt(ct - c_decrement), pt - p_decrement,
                              'With bit_len=%d, seed=%s, \'subtracting\' ciphertexts did not decrypt to the difference of their plaintexts' \
                                % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(-(c_decrement - ct)), pt - p_decrement,
+                             'With bit_len=%d, seed=%s, \'subtracting\' ciphertexts in reverse order did not decrypt to the difference of their plaintexts' \
+                               % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(ct - p_decrement), pt - p_decrement,
+                             'With bit_len=%d, seed=%s, \'subtracting\' an integer from a ciphertext did not decrypt to the difference of the plaintext and the integer' \
+                               % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(-(p_decrement - ct)), pt - p_decrement,
+                             'With bit_len=%d, seed=%s, \'subtracting\' an integer from a ciphertext in reverse order did not decrypt to the difference of the plaintext and the integer' \
+                               % (self.bit_len, repr(self.seed)))
 
             self.assertEqual(self.dj.decrypt(ct * p_multiplier), pt * p_multiplier,
                              'With bit_len=%d, seed=%s, \'multiplying\' the ciphertext by a constant did not result in the plaintext being multplied by the same constant' \
+                               % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(p_multiplier * ct), pt * p_multiplier,
+                             'With bit_len=%d, seed=%s, \'multiplying\' the ciphertext by a constant in reverse order did not result in the plaintext being multplied by the same constant' \
                                % (self.bit_len, repr(self.seed)))
 
             self.assertEqual(self.dj.decrypt(ct / p_divisor), pt / p_divisor,
                              'With bit_len=%d, seed=%s, \'dividing\' the ciphertext by a constant did not result in the plaintext being divided by the same constant' \
                                % (self.bit_len, repr(self.seed)))
-
-            pt = -self.random.getrandbits(self.bit_len)
-            pt = DamgaardJurikPlaintext(pt)
-            ct = self.dj.encrypt(pt, random=self.random)
-            self.assertEqual(self.dj.decrypt(-ct), -pt,
-                             'With bit_len=%d, seed=%s, \'negation\' of the ciphertext did not result in the negation of the plaintext' \
+            self.assertEqual(self.dj.decrypt(ct.__div__(p_divisor)), pt / p_divisor,
+                             'With bit_len=%d, seed=%s, \'dividing\' the ciphertext by a constant using __div__ did not result in the plaintext being divided by the same constant' \
                                % (self.bit_len, repr(self.seed)))
+            self.assertEqual(self.dj.decrypt(ct.__truediv__(p_divisor)), pt / p_divisor,
+                             'With bit_len=%d, seed=%s, \'dividing\' the ciphertext by a constant using __truediv__ did not result in the plaintext being divided by the same constant' \
+                               % (self.bit_len, repr(self.seed)))
+
 
 
 class SimpleEncryptDecryptTest(KeygenTest):
