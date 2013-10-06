@@ -41,7 +41,7 @@ write tests
         durability
 fix timing attacks in Damgaard-Jurik
 see if Damgaard-Jurik should be using safe primes
-implement division in DamgaardJurikCiphertext
+*implement division in DamgaardJurikCiphertext
 check for bad uses of == and !=
 check for bad uses of raise
 support any object that implements the buffer protocol
