@@ -296,7 +296,7 @@ class DamgaardJurikCiphertext(Integral):
 
     def __add__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
-            if self.key is not other.key or self.ns1 != other.ns1:
+            if self.key is not other.key or self.s != other.s or self.ns1 != other.ns1:
                 raise ValueError('Cannot add ciphertexts that belong to different keys')
             return self.wrap(self.c * other.c % self.ns1)
         else:
@@ -308,7 +308,7 @@ class DamgaardJurikCiphertext(Integral):
 
     def __sub__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
-            if self.key is not other.key or self.ns1 != other.ns1:
+            if self.key is not other.key or self.s != other.s or self.ns1 != other.ns1:
                 raise ValueError('Cannot subtract ciphertexts that belong to different keys')
             return self.wrap(self.c * invert(other.c, self.ns1) % self.ns1)
         else:
@@ -317,7 +317,7 @@ class DamgaardJurikCiphertext(Integral):
             return self - other
     def __rsub__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
-            if self.key is not other.key or self.ns1 != other.ns1:
+            if self.key is not other.key or self.s != other.s or self.ns1 != other.ns1:
                 raise ValueError('Cannot subtract ciphertexts that belong to different keys')
             return self.wrap(other.c * invert(self.c, self.ns1) % self.ns1)
         else:
