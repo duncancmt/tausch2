@@ -5,6 +5,7 @@ from numbers import Integral
 from copy import deepcopy
 from primes import gen_prime
 from intbytes import int2bytes, bytes2int
+from util import ImmutableEnforcerMeta
 
 try:
     from gmpy2 import mpz, invert
@@ -52,6 +53,7 @@ class DamgaardJurik(object):
 
     The Paillier cryptosystem is a specific instance of this cryptosystem with s=1
     """
+    __metaclass__ = ImmutableEnforcerMeta
     def __init__(self, keylen=None, random=random, _state=None):
         """Constructor:
 
@@ -62,11 +64,13 @@ class DamgaardJurik(object):
         """
         if _state is not None:
             # initialize self from given state
-            (self.n, self.l) = _state
+            (n, l) = _state
             if has_gmpy:
-                self.n = mpz(self.n)
-                if self.l is not None:
-                    self.l = mpz(self.l)
+                n = mpz(n)
+                if l is not None:
+                    l = mpz(l)
+            self.n = n
+            self.l = l
         else:
             # generate key and initialize self
             if keylen is None:
@@ -81,16 +85,18 @@ class DamgaardJurik(object):
         p = gen_prime(int(floor(keylen / 2.0 + 1)), random=random)
         q = gen_prime(int(ceil(keylen / 2.0)), random=random)
 
-        self.n = p * q
+        n = p * q
+        l = lcm(p-1, q-1)
         if has_gmpy:
-            self.n = mpz(self.n)
-        self.l = lcm(p-1, q-1)
+            n = mpz(n)
+            l = mpz(l)
+        self.n = n
+        self.l = l
 
     def encrypt(self, message, s=1, random=random):
         """Encrypt a message with the public key
 
-        message: the message to be encrypted, may be a bytes, integer type, or DamgaardJurikPlaintext
-            (bytes are interpreted as little-endian, least-significant-byte first)
+        message: the message to be encrypted, must be a DamgaardJurikPlaintext instance
         s: (optional) one less than the exponent of the modulus. Determines the maximum message length.
             The default is 1, which results in Paillier encryption. If s is None, automatically choose the
             minimum s that will fit the message.
@@ -130,8 +136,7 @@ class DamgaardJurik(object):
     def decrypt(self, message):
         """Decrypt and encrypted message. Only works if this instance has a private key available.
 
-        message: the message to be decrypted, may be a bytes, integer type, or DamgaardJurikCiphertext
-            (bytes are interpreted as little-endian, least-significant-byte first)
+        message: the message to be decrypted, must be a DamgaardJurikCiphertext instance
         """
         # check that the private key is available
         if self.l is None:
@@ -190,6 +195,19 @@ class DamgaardJurik(object):
     def privkey(self):
         return (int(self.n), int(self.l))
 
+    @property
+    def n(self):
+        return self._n
+    @n.setter
+    def n(self, value):
+        self._n = value
+    @property
+    def l(self):
+        return self._l
+    @l.setter
+    def l(self, value):
+        self._l = value
+
     @classmethod
     def from_pubkey(cls, pubkey):
         return cls(_state=(pubkey, None))
@@ -202,6 +220,8 @@ class DamgaardJurik(object):
     def __setstate__(self, state):
         self.__init__(_state=state)
 
+    def __hash__(self):
+        return hash((int(self.n), int(self.l)))
     def __eq__(self, other):
         return self.n == other.n and self.l == other.l
     def __ne__(self, other):
