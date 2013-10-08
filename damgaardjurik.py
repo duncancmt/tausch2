@@ -5,6 +5,7 @@ from numbers import Integral
 from copy import deepcopy
 from primes import gen_prime
 from intbytes import int2bytes, bytes2int
+from noconflict import classmaker
 from util import ImmutableEnforcerMeta
 
 try:
@@ -242,8 +243,12 @@ class DamgaardJurikPlaintext(long):
         if retval[-1] != '\x01':
             raise ValueError('Invalid padding for conversion to str')
         return retval[:-1]
-class DamgaardJurikCiphertext(Integral):
+
+class DamgaardJurikCiphertextBase(object):
+    __metaclass__ = ImmutableEnforcerMeta
+class DamgaardJurikCiphertext(DamgaardJurikCiphertextBase, Integral):
     """Class representing the ciphertext in Damgaard-Jurik. Also represents the homomorphisms of Damgaard-Jurik"""
+    __metaclass__ = classmaker()
     def __init__(self, c, key, cache=True, bucket_size=5):
         """Constructor:
 
@@ -255,10 +260,10 @@ class DamgaardJurikCiphertext(Integral):
         bucket_size: (optional) only has an effect if cache=True, number of bits
             per bucket in the cache of powers, default 5
         """
-        if isinstance(c, (Integral, mpz_type)):
-            self.c = c
-        elif isinstance(c, bytes):
-            self.c = bytes2int(c)
+        if isinstance(c, bytes):
+            c = bytes2int(c)
+        elif isinstance(c, (Integral, mpz_type)):
+            pass
         else:
             raise TypeError('Expected argument c to be an integer')
 
@@ -266,11 +271,14 @@ class DamgaardJurikCiphertext(Integral):
             raise TypeError('Expected argument key to be a DamgaardJurik instance')
         self.key = key
 
-        self.s = int(ceil(log(int(self.c), int(self.key.n)) - 1))
-        self.ns1 = self.key.n ** (self.s + 1)
+        s = int(ceil(log(int(c), int(self.key.n)) - 1))
+        ns1 = self.key.n ** (s + 1)
         if has_gmpy:
-            self.c = mpz(self.c)
-            self.ns1 = mpz(self.ns1)
+            c = mpz(c)
+            ns1 = mpz(ns1)
+        self.c = c
+        self.s = s
+        self.ns1 = ns1
         if bucket_size > 8:
             import warnings
             warnings.warn("Setting bucket_size > 8 allows timing attacks based on Python's handling of small integers")
@@ -281,6 +289,41 @@ class DamgaardJurikCiphertext(Integral):
                            for __ in xrange(int(ceil(self.ns1.bit_length()/float(self.bucket_size)))) ]
         else:
             self.cache = None
+
+    @property
+    def c(self):
+        return self._c
+    @c.setter
+    def c(self, value):
+        self._c = value
+
+    @property
+    def key(self):
+        return self._key
+    @key.setter
+    def key(self, value):
+        self._key = value
+
+    @property
+    def s(self):
+        return self._s
+    @s.setter
+    def s(self, value):
+        self._s = value
+
+    @property
+    def ns1(self):
+        return self._ns1
+    @ns1.setter
+    def ns1(self, value):
+        self._ns1 = value
+
+    @property
+    def cache(self):
+        return self._cache
+    @cache.setter
+    def cache(self, value):
+        self._cache = value
 
     def populate_cache(self):
         if self.cache is None:
@@ -398,6 +441,8 @@ class DamgaardJurikCiphertext(Integral):
     def __pos__(self):
         return self
 
+    def __hash__(self):
+        return hash((int(self.c), self.key, int(self.s), int(self.ns1)))
     def __lt__(self, other):
         if isinstance(other, DamgaardJurikCiphertext):
             return self.c < other.c

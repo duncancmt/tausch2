@@ -66,7 +66,10 @@ class ImmutableEnforcerMeta(type):
         namespace = dict(namespace)
         namespace['__setattr__'] = __setattr__
         namespace['__delattr__'] = __delattr__
-        return super(ImmutableEnforcerMeta, mcls).__new__(mcls, name, bases, namespace)
+        namespace['__immutable__'] = False
+        cls = super(ImmutableEnforcerMeta, mcls).__new__(mcls, name, bases, namespace)
+        cls.__immutable__ = True
+        return cls
 
 
     def __setattr__(cls, name, value):
@@ -74,7 +77,7 @@ class ImmutableEnforcerMeta(type):
         dict_getter = type.__dict__['__dict__'].__get__
         static_setattr = type.__setattr__
 
-        if name[0] == '_':
+        if name[0] == '_' and cls.__immutable__:
             mro = mro_getter(cls)
             if mro is None:
                 mro = tuple()
@@ -89,7 +92,7 @@ class ImmutableEnforcerMeta(type):
         dict_getter = type.__dict__['__dict__'].__get__
         static_setattr = type.__setattr__
 
-        if name[0] == '_':
+        if name[0] == '_' and cls.__immutable__:
             mro = mro_getter(cls)
             if mro is None:
                 mro = tuple()
