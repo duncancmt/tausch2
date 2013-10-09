@@ -3,6 +3,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
+import cPickle
 
 from tausch import *
 import keccak
@@ -10,16 +11,13 @@ import damgaardjurik as dj
 
 class BasicTauschRouterTest(unittest.TestCase):
     longMessage = True
-    def __init__(self, seed, keylen, num_users):
+    def __init__(self, seed, users):
         self.seed = seed
-        self.keylen = keylen
-        self.num_users = num_users
+        self.users = list(users)
         super(BasicTauschRouterTest, self).__init__()
 
     def setUp(self):
         self.random = keccak.KeccakRandom(seed)
-        self.users = [ dj.DamgaardJurik(self.keylen, random=self.random)
-                       for _ in xrange(self.num_users) ]
         self.random.shuffle(self.users)
         temp = list(self.users)
         self.random.shuffle(temp)
@@ -50,6 +48,8 @@ class BasicTauschRouterTest(unittest.TestCase):
             self.router.add_user(user, callback)
         self.router._check_consistency()
 
+        self.assertEqual(self.router.users, frozenset(self.users)) # TODO: message
+
         messages = dict( (user, self.random.getrandbits(32))
                          for user in self.users )
         for user, message in messages.iteritems():
@@ -58,23 +58,21 @@ class BasicTauschRouterTest(unittest.TestCase):
         routed = self.router.route_messages()
         for user, message in routed.iteritems():
             expected_message = messages[self.listen_map[user]]
-            self.assertEqual(expected_message, user.decrypt(message))
+            self.assertEqual(expected_message, user.decrypt(message)) # TODO: message
 
         removal_order = list(self.users)
         self.random.shuffle(removal_order)
         for user in removal_order:
-            self.random.del_user(user)
+            self.router.del_user(user)
 
 
 if __name__ == '__main__':
-    keylens = [512, 768, 1024, 2048, 4096]
+    sample_keys = cPickle.Unpickler(open('sample_keys.pkl','rb')).load()
     num_userss = [0, 1, 2, 3, 4, 8, 15, 16, 32]
-    seeds = ['', 'foo', 'bar', 'baz', 'qux', 'quux', 'corge', 'grault', 'garply', 'waldo', 'fred', 'plugh', 'xyzzy', 'thud' ]
     basic_tests = list()
-    for keylen in keylens:
+    for (keylen, seed), users in test_keys.iteritems():
         for num_users in num_userss:
-            for seed in seeds:
-                basic_tests.append(BasicTauschRouterTest(seed, keylen, num_users))
+            basic_tests.append(BasicTauschRouterTest(seed, users[:num_users]))
     basic_tests = unittest.TestSuite(basic_tests)
     unittest.TextTestRunner(verbosity=2).run(basic_tests)
             

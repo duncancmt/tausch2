@@ -83,10 +83,15 @@ class TauschRouter(object):
     def add_user(self, user, callback):
         """Add a new user to the router with the given status update callback"""
         with self.lock:
+            try: self._check_user(user)
+            except: pass
+            else: raise KeyError('User already exists')
+
             self.modification_callbacks[user] = callback
             self.table[user] = dict()
-            for callback in self.modification_callbacks.itervalues():
-                callback('add', user)
+            callbacks = self.modification_callbacks.values()
+        for callback in callbacks:
+            callback('add', user)
 
 
     def del_user(self, user):
@@ -98,9 +103,10 @@ class TauschRouter(object):
             self.modification_callbacks.pop(user, None)
             for subscription in self.table.itervalues():
                 subscription.pop(user, None)
-            for callback in self.modification_callbacks.itervalues():
-                callback('del', user)
-        self._check_consistency()
+            callbacks = self.modification_callbacks.values()
+        for callback in callbacks:
+            callback('del', user)
+        # self._check_consistency()
 
     @property
     def users(self):
