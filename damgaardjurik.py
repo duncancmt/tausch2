@@ -6,7 +6,7 @@ from copy import deepcopy
 from primes import gen_prime
 from intbytes import int2bytes, bytes2int
 from noconflict import classmaker
-from util import ImmutableEnforcerMeta
+from immutable import ImmutableEnforcerMeta
 
 try:
     from gmpy2 import mpz, invert
