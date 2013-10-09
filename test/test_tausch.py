@@ -49,14 +49,21 @@ class BasicTauschRouterTest(unittest.TestCase):
             callback = self.make_callback(user, self.listen_map[user], self.router, self.router.users, self.random)
             self.router.add_user(user, callback)
         self.router._check_consistency()
+
         messages = dict( (user, self.random.getrandbits(32))
                          for user in self.users )
         for user, message in messages.iteritems():
             self.router.queue_message(user, message)
+
         routed = self.router.route_messages()
         for user, message in routed.iteritems():
             expected_message = messages[self.listen_map[user]]
             self.assertEqual(expected_message, user.decrypt(message))
+
+        removal_order = list(self.users)
+        self.random.shuffle(removal_order)
+        for user in removal_order:
+            self.random.del_user(user)
 
 
 if __name__ == '__main__':
