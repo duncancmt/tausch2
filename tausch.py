@@ -3,6 +3,7 @@ from numbers import Integral
 from threading import RLock
 
 class TauschRouter(object):
+    """Class representing the blinded routing operation that can be performed based on Damgaard Jurik"""
     def __init__(self):
         self.lock = RLock()
         with self.lock:
@@ -11,12 +12,14 @@ class TauschRouter(object):
             self.modification_callbacks = dict()
 
     def _check_user(self, user):
+        """Given a user (a DamgaardJurik instance) check that the user is participating in this router"""
         if not isinstance(user, DamgaardJurik):
             raise TypeError('user must be a DamgaardJurik instance')
         with self.lock:
             if user not in self.table:
                 raise KeyError('Unknown user')
     def _check_subscription(self, subscription):
+        """Given a subscription, check that it is well-formed for this particular router"""
         # check types
         for sender, selector in subscription.iteritems():
             if not isinstance(sender, DamgaardJurik) or not isinstance(selector, DamgaardJurikCiphertext):
@@ -26,6 +29,7 @@ class TauschRouter(object):
             if frozenset(subscription.iterkeys()) != frozenset(self.table.iterkeys()):
                 raise KeyError('Mismatch between subscription users and routing table users')
     def _check_consistency(self):
+        """Check that all the state of this router is consistent"""
         with self.lock:
             for subscription in self.table.itervalues():
                 self._check_subscription(subscription)
@@ -34,6 +38,9 @@ class TauschRouter(object):
 
 
     def queue_message(self, user, message):
+        """Queue a message (an integer) from the given user (a DamgaardJurik instance)
+        to be routed on the next round
+        """
         if not isinstance(message, Integral):
             raise TypeError('Argument message must be an integer')
 
@@ -46,6 +53,10 @@ class TauschRouter(object):
 
 
     def route_messages(self):
+        """Perform the routing operation, returning a dict of user -> message
+        Where user (a DamgaardJurik instance) is the recipient of the message
+        (a DamgaardJurikCiphertext instance)
+        """
         with self.lock:
             self._check_consistency()
             for user in self.table.iterkeys():
@@ -61,6 +72,7 @@ class TauschRouter(object):
 
 
     def update_subscription(self, user, subscription):
+        """Replace the current subscription for the given user with the given subscription"""
         with self.lock:
             self._check_user(user)
             self._check_subscription(subscription)
@@ -69,6 +81,7 @@ class TauschRouter(object):
 
 
     def add_user(self, user, callback):
+        """Add a new user to the router with the given status update callback"""
         with self.lock:
             self.modification_callbacks[user] = callback
             self.table[user] = dict()
@@ -77,6 +90,7 @@ class TauschRouter(object):
 
 
     def del_user(self, user):
+        """Delete a user from the router"""
         with self.lock:
             self._check_user(user)
             self.queue.pop(user, None)

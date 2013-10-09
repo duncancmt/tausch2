@@ -33,6 +33,7 @@ write tests
             *valid encryption/decryption cycle
             *changed ciphertext results in mac not checking out
         unpadding
+        pickling and state storage
     mnemonic.py
         standard vectors
         random vectors

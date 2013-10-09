@@ -103,6 +103,8 @@ class DamgaardJurik(object):
             minimum s that will fit the message.
         random: (optional) a source of entropy for the generation of r, a parameter for the encryption
             the default is python's random
+        ciphertext_args: (optional) keyword arguments to be supplied to the DamgaardJurikCiphertext
+            instance that this method returns
         """
 
         if not isinstance(message, DamgaardJurikPlaintext):
@@ -326,6 +328,9 @@ class DamgaardJurikCiphertext(DamgaardJurikCiphertextBase, Integral):
         self._cache = value
 
     def populate_cache(self):
+        """When caching of powers is enabled, populate the cache as appropriate.
+        If the cache is not enabled, raises RuntimeError
+        """
         if self.cache is None:
             raise RuntimeError("Tried to populate the cache of a DamgaardJurikCiphertext instance without a cache")
         elif self.cache[0][1] is None:
@@ -345,8 +350,12 @@ class DamgaardJurikCiphertext(DamgaardJurikCiphertextBase, Integral):
                     # assert bucket[j] % self.ns1 == pow(self.c, 2**(self.bucket_size*i)*j, self.ns1)
 
     def wrap(self, other):
+        """Convert an integer to a DamgaardJurikCiphertext instance with the
+        same arguments as this instance.
+        """
         return type(self)(other, self.key, self.cache is not None, self.bucket_size)
     def convert(self, i):
+        """Encrypt an integer with the same key as this instance"""
         # it doesn't matter that r is chosen using a bad RNG because it will
         # be combined with our r that is chosen using a good RNG
         return self.key.encrypt(DamgaardJurikPlaintext(i), s=self.s)
@@ -395,6 +404,7 @@ class DamgaardJurikCiphertext(DamgaardJurikCiphertextBase, Integral):
         if self.cache is None:
             return self.wrap(pow(self.c, other, self.ns1))
         else:
+            # perform the cache-accelerated exponentiation
             self.populate_cache()
             retval = 1
             garbage = 1

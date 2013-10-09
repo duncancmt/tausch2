@@ -537,7 +537,14 @@ except ImportError:
     warnings.warn("Not having correct_random.CorrectRandom makes some of KeccakRandom's methods produce biased output")
     from random import Random as random_base
 class KeccakRandom(random_base):
+    """A random implementation based on the Keccak sponge function"""
     def __init__(self, seed=None, keccak_args=dict(), _state=None):
+        """Constructor:
+
+        seed: a bytes from which to deterministically initialize the state of this instance
+        keccak_args (optional): keyword arguments to supply to the underlying Keccak instance
+        _state (do not use): a state tuple to initialize from instead of using the seed
+        """
         if _state is not None:
             self.setstate(_state)
         else:
@@ -551,9 +558,14 @@ class KeccakRandom(random_base):
 
     @classmethod
     def from_state(cls, state):
+        """Alternate constructor:
+
+        Return a KeccakRandom instance directly initialized from a state tuple
+        """
         return cls(seed=None, keccak_args=None, _state=state)
 
     def getrandbits(self, n):
+        """Generate a long integer with n random bits"""
         bytes_needed = max(int(ceil((n-self._cache_len) / 8.0)), 0)
 
         self._cache |= bytes2int(self.k.squeeze(bytes_needed)) << self._cache_len
@@ -565,6 +577,7 @@ class KeccakRandom(random_base):
         return result
 
     def seed(self, seed):
+        """Deterministically reinitialize this instance from the given seed"""
         self.k = Keccak(**self.keccak_args)
 
         if seed is None:
@@ -579,15 +592,22 @@ class KeccakRandom(random_base):
         self._cache_len = 0L
 
     def getstate(self):
+        """Return a state tuple that can be used to create identical copies of this instance"""
         return deepcopy((self.keccak_args, self.k.getstate(),
                          self._cache, self._cache_len))
 
     def setstate(self, state):
+        """Directly reinitialize this instance from a state tuple, making it identical
+        to the instance that provided the state.
+        """
         (self.keccak_args, keccak_state, self._cache, self._cache_len) = deepcopy(state)
         self.k = Keccak(**self.keccak_args)
         self.k.setstate(keccak_state)
 
     def jumpahead(self, n):
+        """Jump the underlying Keccak instance ahead the given number of states and
+        continue producing randomness from there.
+        """
         # iterate Keccak n times
         for _ in xrange(n):
             self.k.squeeze(self.k.r//8)
@@ -636,6 +656,7 @@ class KeccakCipher(object):
         self.mac_round_byte = '\x01'
         assert self.cipher_round_byte != self.mac_round_byte
 
+        # get the underlying Keccak instance to the correct state to begin encryption/decryption
         self.encrypt_not_decrypt = True
         self.last_block = '\x00'*self.mac_size
         self.encrypt(key)
