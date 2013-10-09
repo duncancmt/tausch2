@@ -94,7 +94,7 @@ class DamgaardJurik(object):
         self.n = n
         self.l = l
 
-    def encrypt(self, message, s=1, random=random):
+    def encrypt(self, message, s=1, random=random, ciphertext_args=dict()):
         """Encrypt a message with the public key
 
         message: the message to be encrypted, must be a DamgaardJurikPlaintext instance
@@ -132,7 +132,7 @@ class DamgaardJurik(object):
         c %= ns1
 
         # format the ciphertext as DamgaardJurikCiphertext
-        return DamgaardJurikCiphertext(c, self)
+        return DamgaardJurikCiphertext(c, self, **ciphertext_args)
 
     def decrypt(self, message):
         """Decrypt and encrypted message. Only works if this instance has a private key available.
