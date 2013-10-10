@@ -1,11 +1,13 @@
 import cPickle
 import string
+import sys
 from itertools import imap, izip, count, chain
 from intbytes import int2bytes, bytes2int, encode_varint, decode_varint
 from math import log, floor, ceil
 from keccak import Keccak
 
-words = cPickle.Unpickler(open('words.pkl','rb')).load()
+bigfiles_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bigfiles')
+words = cPickle.Unpickler(open(os.path.join(bigfiles_path, 'words.pkl'),'rb')).load()
 rwords = dict(izip(words,count()))
 
 def dldist(s, n):

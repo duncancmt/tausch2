@@ -1,5 +1,6 @@
 import os.path
 import sys
+bigfiles_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'bigfiles')
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest
@@ -67,7 +68,7 @@ class BasicTauschRouterTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    sample_keys = cPickle.Unpickler(open('sample_keys.pkl','rb')).load()
+    sample_keys = cPickle.Unpickler(open(os.path.join(bigfiles_path, 'sample_keys.pkl'),'rb')).load()
     num_userss = [0, 1, 2, 3, 4, 8, 15, 16, 32]
     basic_tests = list()
     for (keylen, seed), users in test_keys.iteritems():
