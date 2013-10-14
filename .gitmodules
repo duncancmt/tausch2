@@ -1,3 +1,4 @@
 [submodule "bigfiles"]
 	path = bigfiles
-	url = duncant@athena.dialup.mit.edu:~/Public/tausch2_bigfiles.git
+	url = athena.dialup.mit.edu:/mit/duncant/Public/taush2_bigfiles.git
+	branch = origin/master
