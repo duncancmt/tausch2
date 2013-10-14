@@ -94,13 +94,12 @@ class DamgaardJurik(object):
         self.n = n
         self.l = l
 
-    def encrypt(self, message, s=1, random=random, ciphertext_args=dict()):
+    def encrypt(self, message, s=None, random=random, ciphertext_args=dict()):
         """Encrypt a message with the public key
 
         message: the message to be encrypted, must be a DamgaardJurikPlaintext instance
         s: (optional) one less than the exponent of the modulus. Determines the maximum message length.
-            The default is 1, which results in Paillier encryption. If s is None, automatically choose the
-            minimum s that will fit the message.
+            If s is None (the default), automatically choose the minimum s that will fit the message.
         random: (optional) a source of entropy for the generation of r, a parameter for the encryption
             the default is python's random
         ciphertext_args: (optional) keyword arguments to be supplied to the DamgaardJurikCiphertext
