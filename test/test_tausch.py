@@ -71,7 +71,7 @@ if __name__ == '__main__':
     sample_keys = cPickle.Unpickler(open(os.path.join(bigfiles_path, 'sample_keys.pkl'),'rb')).load()
     num_userss = [0, 1, 2, 3, 4, 8, 15, 16, 32]
     basic_tests = list()
-    for (keylen, seed), users in test_keys.iteritems():
+    for (keylen, seed), users in sample_keys.iteritems():
         for num_users in num_userss:
             basic_tests.append(BasicTauschRouterTest(seed, users[:num_users]))
     basic_tests = unittest.TestSuite(basic_tests)
