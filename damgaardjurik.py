@@ -100,6 +100,7 @@ class DamgaardJurik(object):
         message: the message to be encrypted, must be a DamgaardJurikPlaintext instance
         s: (optional) one less than the exponent of the modulus. Determines the maximum message length.
             If s is None (the default), automatically choose the minimum s that will fit the message.
+            WARNING: setting s=None opens you up to some serious timing attacks
         random: (optional) a source of entropy for the generation of r, a parameter for the encryption
             the default is python's random
         ciphertext_args: (optional) keyword arguments to be supplied to the DamgaardJurikCiphertext
@@ -112,12 +113,15 @@ class DamgaardJurik(object):
         # format the message as an integer
         i = int(message)
 
-        # check/calculate s
-        if s is None:
-            # determine s from message length
-            s = int(ceil(log(i, int(self.n))))
-            assert s > 0
-        elif i >= self.n**s: # check that the message will fit with the given s
+        if s is None: # determine s from message length
+            try:
+                s = int(ceil(log(i, int(self.n))))
+                s = max(s, 1) # i == 1
+            except ValueError:
+                # stupid edge cases
+                assert i == 0
+                s = 1
+        if i >= self.n**s: # check that the message will fit with the given s
             raise ValueError('message value is too large for the given value of s')
 
         # utility constants
