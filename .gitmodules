@@ -5,4 +5,4 @@
 [submodule "crypto_utils"]
 	path = crypto_utils
 	url = athena.dialup.mit.edu:/mit/duncant/Public/crypto_utils.git
-	branch = origin/master
+	branch = master
