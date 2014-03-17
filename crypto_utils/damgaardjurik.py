@@ -20,6 +20,7 @@ except ImportError:
     except ImportError:
         import warnings
         warnings.warn('Not having gmpy2 or gmpy makes this at least 10x slower')
+        mpz_type = Integral
         has_gmpy = False
 
 def lcm(a,b):
